@@ -269,10 +269,11 @@ code{
 
 /* KPI tiles */
 .kpi-label{
-  font-size:12px;
+  font-size:13.5px;
+  font-weight:600;
   color:var(--muted);
   margin-bottom:6px;
-  letter-spacing:.15px;
+  letter-spacing:.25px;
 }
 .kpi-value{
   font-size:26px;
@@ -586,7 +587,11 @@ pre{
       <canvas id="c_lo" height="180"></canvas>
       <div class="kpi-sub">Grouped by <code>Fields.317</code> (label includes volume)</div>
     </div>
-
+    <div class="card span-6">
+      <div class="kpi-label">Loan Program</div>
+      <div class="list" id="loanProgramList">—</div>
+      <div class="kpi-sub">Grouped by <code>Fields.1401</code>. Click a program to drill-through.</div>
+    </div>
     <div class="card span-12">
       <div class="kpi-label">Milestone Turn Times (Average Days)</div>
       <canvas id="c_turnTimes" height="160"></canvas>
@@ -605,7 +610,7 @@ pre{
     </div>
 
     <div class="card span-6">
-      <div class="kpi-label">Rate Type Mix (Buckets)</div>
+      <div class="kpi-label">Loan Types</div>
       <div class="list" id="rateTypeList">—</div>
       <div class="kpi-sub">Click a bucket to drill-through.</div>
     </div>
@@ -1176,7 +1181,8 @@ pre{
       lastSnapshotKey: "kpi:lastSnapshot",
       viewKey: "kpi:views",
       drill: {},
-      drillRateBucket: {}
+      drillRateBucket: {},
+      drillLoanProgram: {}
     };
 
     function getField(loan, key){
@@ -1210,7 +1216,7 @@ pre{
     function normalizeLoan(loan){
       const loanNumber = safe(getField(loan, "Loan.LoanNumber"), "");
       const amt = toNumber(getField(loan, "Loan.LoanAmount"));
-
+      const loanProgram = normStr(getField(loan, "Fields.1401"));
       const lo = safe(getField(loan, "Fields.317"), "Unassigned");
       const purpose = normStr(getField(loan, "Fields.19"));
       const amortType = normStr(getField(loan, "Fields.608"));
@@ -1239,6 +1245,7 @@ pre{
         purpose,
         amortType,
         loanType,
+        loanProgram,
         rateBucket,
         milestone,
         appDate,
@@ -1299,288 +1306,305 @@ pre{
       if (kind) tileEl.classList.add(kind);
     }
 
-    function computeKpis(loans){
-      const totalUnits = loans.length;
-      const totalVol = loans.reduce((a,l)=>a+(Number.isFinite(l.amt)?l.amt:0), 0);
-      const avgAmt = totalUnits ? (totalVol/totalUnits) : NaN;
+function computeKpis(loans){
+  const totalUnits = loans.length;
+  const totalVol = loans.reduce((a,l)=>a+(Number.isFinite(l.amt)?l.amt:0), 0);
+  const avgAmt = totalUnits ? (totalVol/totalUnits) : NaN;
 
-      const loSet = new Set(loans.map(l=>l.lo).filter(v=>v && v !== "Unassigned"));
-      const uniqueLOs = loSet.size;
+  const loSet = new Set(loans.map(l=>l.lo).filter(v=>v && v !== "Unassigned"));
+  const uniqueLOs = loSet.size;
 
-      const { start, end } = monthWindow();
-      const appsMTDLoans = loans.filter(l => l.appDate && l.appDate >= start && l.appDate < end);
-      const appsMTD = appsMTDLoans.length;
+  const { start, end } = monthWindow();
+  const appsMTDLoans = loans.filter(l => l.appDate && l.appDate >= start && l.appDate < end);
+  const appsMTD = appsMTDLoans.length;
 
-      const fundedMTDLoans = loans.filter(l => l.closeDate && l.closeDate >= start && l.closeDate < end);
-      const fundedMTD = fundedMTDLoans.length;
+  const fundedMTDLoans = loans.filter(l => l.closeDate && l.closeDate >= start && l.closeDate < end);
+  const fundedMTD = fundedMTDLoans.length;
 
-      const pullThrough = appsMTD ? (fundedMTD / appsMTD) : NaN;
+  const pullThrough = appsMTD ? (fundedMTD / appsMTD) : NaN;
 
-      const threshold = Math.max(1, Math.min(365, Number($("ageDays").value || 45)));
-      const now = new Date();
-      const agedLoansList = loans.filter(l => l.appDate && (daysBetween(l.appDate, now) > threshold));
-      const agedLoans = agedLoansList.length;
+  const threshold = Math.max(1, Math.min(365, Number($("ageDays").value || 45)));
+  const now = new Date();
+  const agedLoansList = loans.filter(l => l.appDate && (daysBetween(l.appDate, now) > threshold));
+  const agedLoans = agedLoansList.length;
 
-      const appToDiscList = loans.map(l => daysBetween(l.appDate, l.discDate)).filter(d => Number.isFinite(d) && d >= 0);
-      const appToUWList   = loans.map(l => daysBetween(l.appDate, l.uwDate)).filter(d => Number.isFinite(d) && d >= 0);
-      const appToCloseList= loans.map(l => daysBetween(l.appDate, l.closeDate)).filter(d => Number.isFinite(d) && d >= 0);
+  const appToDiscList  = loans.map(l => daysBetween(l.appDate, l.discDate)).filter(d => Number.isFinite(d) && d >= 0);
+  const appToUWList    = loans.map(l => daysBetween(l.appDate, l.uwDate)).filter(d => Number.isFinite(d) && d >= 0);
+  const appToCloseList = loans.map(l => daysBetween(l.appDate, l.closeDate)).filter(d => Number.isFinite(d) && d >= 0);
 
-      const avg = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : NaN;
+  const avg = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : NaN;
 
-      const avgAppToDisc = avg(appToDiscList);
-      const avgAppToUW   = avg(appToUWList);
-      const avgAppToClose= avg(appToCloseList);
+  const avgAppToDisc  = avg(appToDiscList);
+  const avgAppToUW    = avg(appToUWList);
+  const avgAppToClose = avg(appToCloseList);
 
-      // purpose distribution excluding unknown/blank
-      const byPurpose = {};
-      for (const l of loans){
-        if (!l.purpose) continue;
-        byPurpose[l.purpose] = (byPurpose[l.purpose] || 0) + 1;
-      }
-      const purposeEntries = sortEntries(byPurpose);
-      const topPurpose = purposeEntries[0]?.[0] ?? "—";
-      const topPurposeShare = totalUnits ? (purposeEntries[0]?.[1] || 0) / totalUnits : NaN;
+  // purpose distribution excluding unknown/blank
+  const byPurpose = {};
+  for (const l of loans){
+    if (!l.purpose) continue;
+    byPurpose[l.purpose] = (byPurpose[l.purpose] || 0) + 1;
+  }
+  const purposeEntries = sortEntries(byPurpose);
+  const topPurpose = purposeEntries[0]?.[0] ?? "—";
+  const topPurposeShare = totalUnits ? (purposeEntries[0]?.[1] || 0) / totalUnits : NaN;
 
-      const byMilestone = {};
-      const byLO = {};
-      const volByLO = {};
-      const byRateBucket = {};
-      const drillRateBucket = {};
+  const byMilestone = {};
+  const byLO = {};
+  const volByLO = {};
+  const byRateBucket = {};
+  const drillRateBucket = {};
 
-      for (const l of loans){
-        byMilestone[l.milestone] = (byMilestone[l.milestone] || 0) + 1;
+  // ✅ NEW: Loan Program Mix (1401)
+  const byLoanProgram = {};
+  const drillLoanProgram = {};
 
-        byLO[l.lo] = (byLO[l.lo] || 0) + 1;
-        volByLO[l.lo] = (volByLO[l.lo] || 0) + (Number.isFinite(l.amt) ? l.amt : 0);
+  for (const l of loans){
+    byMilestone[l.milestone] = (byMilestone[l.milestone] || 0) + 1;
 
-        if (l.rateBucket){
-          byRateBucket[l.rateBucket] = (byRateBucket[l.rateBucket] || 0) + 1;
-          (drillRateBucket[l.rateBucket] ||= []).push(l);
-        }
-      }
+    byLO[l.lo] = (byLO[l.lo] || 0) + 1;
+    volByLO[l.lo] = (volByLO[l.lo] || 0) + (Number.isFinite(l.amt) ? l.amt : 0);
 
-      const milestoneEntries = sortEntries(byMilestone);
-      const loEntries = sortEntries(byLO);
-      const rateBucketEntries = sortEntries(byRateBucket);
-
-      state.drillRateBucket = drillRateBucket;
-
-      // Turn time calculations (requested)
-      const submitToAppComplete = loans
-        .map(l => daysBetween(l.appDate, l.msLoanAppDate))
-        .filter(d => Number.isFinite(d) && d >= 0);
-
-      const appToProcessing = loans
-        .map(l => daysBetween(l.msLoanAppDate, l.msProcessingDate))
-        .filter(d => Number.isFinite(d) && d >= 0);
-
-      const avgSubmitToAppComplete = avg(submitToAppComplete);
-      const avgAppToProcessing = avg(appToProcessing);
-
-      // Placeholder for future milestone calcs (keep commented so we can add 6–8 more cleanly)
-      /*
-      // Example future calcs:
-      // Label = Processing → Underwriting
-      // Days = Fields.Log.MS.Date.Underwriting - Fields.Log.MS.Date.Processing
-      // const MS_DATE_UNDERWRITING = "Fields.Log.MS.Date.Underwriting";
-      // const procToUw = loans
-      //   .map(l => daysBetween(l.msProcessingDate, parseDate(getField(l._raw, MS_DATE_UNDERWRITING))))
-      //   .filter(d => Number.isFinite(d) && d >= 0);
-      // const avgProcToUw = avg(procToUw);
-      */
-
-      state.drill = {
-        pipelineUnits: loans,
-        pipelineVol: loans,
-        avgLoanAmt: loans,
-        uniqueLOs: loans,
-        appsMTD: appsMTDLoans,
-        fundedMTD: fundedMTDLoans,
-        pullThrough: appsMTDLoans,
-        agedLoans: agedLoansList,
-        t_appToDisc: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.discDate)) && daysBetween(l.appDate, l.discDate) >= 0),
-        t_appToUW: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.uwDate)) && daysBetween(l.appDate, l.uwDate) >= 0),
-        t_appToClose: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.closeDate)) && daysBetween(l.appDate, l.closeDate) >= 0),
-        mixPurposeTop: loans.filter(l => l.purpose && l.purpose === topPurpose)
-      };
-
-      return {
-        totalUnits, totalVol, avgAmt, uniqueLOs,
-        appsMTD, fundedMTD, pullThrough,
-        agedLoans, threshold,
-        avgAppToDisc, avgAppToUW, avgAppToClose,
-        topPurpose, topPurposeShare,
-        milestoneEntries, loEntries, volByLO,
-        purposeEntries,
-        rateBucketEntries,
-        // turn times (new)
-        avgSubmitToAppComplete,
-        avgAppToProcessing,
-        submitToAppCount: submitToAppComplete.length,
-        appToProcCount: appToProcessing.length
-      };
+    if (l.rateBucket){
+      byRateBucket[l.rateBucket] = (byRateBucket[l.rateBucket] || 0) + 1;
+      (drillRateBucket[l.rateBucket] ||= []).push(l);
     }
 
-    function renderKpis(k, prior){
-      $("k_pipelineUnits").textContent = String(k.totalUnits);
-      $("k_pipelineVol").textContent   = money(k.totalVol);
-      $("k_avgLoanAmt").textContent    = Number.isFinite(k.avgAmt) ? money(k.avgAmt) : "—";
-      $("k_uniqueLOs").textContent     = String(k.uniqueLOs);
-
-      $("k_appsMTD").textContent       = String(k.appsMTD);
-      $("k_fundedMTD").textContent     = String(k.fundedMTD);
-      $("k_pullThrough").textContent   = Number.isFinite(k.pullThrough) ? pct(k.pullThrough) : "—";
-      $("k_agedLoans").textContent     = String(k.agedLoans);
-
-      $("k_appToDisc").textContent     = Number.isFinite(k.avgAppToDisc) ? k.avgAppToDisc.toFixed(1) : "—";
-      $("k_appToUW").textContent       = Number.isFinite(k.avgAppToUW) ? k.avgAppToUW.toFixed(1) : "—";
-      $("k_appToClose").textContent    = Number.isFinite(k.avgAppToClose) ? k.avgAppToClose.toFixed(1) : "—";
-      $("k_mixPurposeTop").textContent = k.topPurpose === "—" ? "—" : `${k.topPurpose} • ${pct(k.topPurposeShare)}`;
-
-      if (prior){
-        setTrend("t_pipelineUnits", k.totalUnits, prior.totalUnits);
-        setTrend("t_pipelineVol",   k.totalVol,   prior.totalVol);
-        setTrend("t_avgLoanAmt",    k.avgAmt,     prior.avgAmt);
-        setTrend("t_uniqueLOs",     k.uniqueLOs,  prior.uniqueLOs);
-
-        setTrend("t_appsMTD",       k.appsMTD,     prior.appsMTD);
-        setTrend("t_fundedMTD",     k.fundedMTD,   prior.fundedMTD);
-        setTrend("t_pullThrough",   k.pullThrough, prior.pullThrough);
-        setTrend("t_agedLoans",     k.agedLoans,   prior.agedLoans);
-
-        setTrend("t_appToDisc",     k.avgAppToDisc, prior.avgAppToDisc);
-        setTrend("t_appToUW",       k.avgAppToUW,   prior.avgAppToUW);
-        setTrend("t_appToClose",    k.avgAppToClose, prior.avgAppToClose);
-      }
-
-      const tiles = Array.from(document.querySelectorAll(".kpi-tile"));
-      for (const t of tiles) t.classList.remove("health-ok","health-warn","health-bad");
-
-      setHealth(document.querySelector('[data-kpi="t_appToDisc"]'),
-        Number.isFinite(k.avgAppToDisc) ? (k.avgAppToDisc > 5 ? "health-bad" : (k.avgAppToDisc > 3 ? "health-warn" : "health-ok")) : null
-      );
-
-      const agedRatio = k.totalUnits ? (k.agedLoans / k.totalUnits) : NaN;
-      setHealth(document.querySelector('[data-kpi="agedLoans"]'),
-        Number.isFinite(agedRatio) ? (agedRatio > 0.20 ? "health-bad" : (agedRatio > 0.10 ? "health-warn" : "health-ok")) : null
-      );
+    // ✅ NEW: group by loan program (Fields.1401)
+    if (l.loanProgram){
+      byLoanProgram[l.loanProgram] = (byLoanProgram[l.loanProgram] || 0) + 1;
+      (drillLoanProgram[l.loanProgram] ||= []).push(l);
     }
+  }
 
-    function renderList(elId, entries, { topN=10, volByKey=null, onClickKey=null } = {}){
-      const el = $(elId);
-      if (!el) return;
-      if (!entries.length){ el.textContent = "—"; return; }
+  const milestoneEntries = sortEntries(byMilestone);
+  const loEntries = sortEntries(byLO);
+  const rateBucketEntries = sortEntries(byRateBucket);
 
-      el.innerHTML = entries.slice(0, topN).map(([k,v]) => {
-        const vol = volByKey ? volByKey[k] : null;
-        return `
-          <div class="list-item ${onClickKey ? "clickable" : ""}" data-key="${escapeHtml(k)}">
-            <div>
-              <b>${escapeHtml(k)}</b>
-              <div class="badge">${v} loans${volByKey ? ` • ${escapeHtml(moneyShort(vol || 0))}` : ""}</div>
-            </div>
-            <div class="right"><b>${v}</b></div>
+  // ✅ NEW
+  const loanProgramEntries = sortEntries(byLoanProgram);
+
+  state.drillRateBucket = drillRateBucket;
+  state.drillLoanProgram = drillLoanProgram; // assumes state has drillLoanProgram: {}
+
+  // Turn time calculations
+  const submitToAppComplete = loans
+    .map(l => daysBetween(l.appDate, l.msLoanAppDate))
+    .filter(d => Number.isFinite(d) && d >= 0);
+
+  // ✅ This is the exact subtraction you asked for:
+  // msProcessingDate - msLoanAppDate
+  const appToProcessing = loans
+    .map(l => daysBetween(l.msLoanAppDate, l.msProcessingDate))
+    .filter(d => Number.isFinite(d) && d >= 0);
+
+  const avgSubmitToAppComplete = avg(submitToAppComplete);
+  const avgAppToProcessing = avg(appToProcessing);
+
+  state.drill = {
+    pipelineUnits: loans,
+    pipelineVol: loans,
+    avgLoanAmt: loans,
+    uniqueLOs: loans,
+    appsMTD: appsMTDLoans,
+    fundedMTD: fundedMTDLoans,
+    pullThrough: appsMTDLoans,
+    agedLoans: agedLoansList,
+    t_appToDisc: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.discDate)) && daysBetween(l.appDate, l.discDate) >= 0),
+    t_appToUW: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.uwDate)) && daysBetween(l.appDate, l.uwDate) >= 0),
+    t_appToClose: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.closeDate)) && daysBetween(l.appDate, l.closeDate) >= 0),
+    mixPurposeTop: loans.filter(l => l.purpose && l.purpose === topPurpose)
+  };
+
+  return {
+    totalUnits, totalVol, avgAmt, uniqueLOs,
+    appsMTD, fundedMTD, pullThrough,
+    agedLoans, threshold,
+    avgAppToDisc, avgAppToUW, avgAppToClose,
+    topPurpose, topPurposeShare,
+    milestoneEntries, loEntries, volByLO,
+    purposeEntries,
+    rateBucketEntries,
+
+    // ✅ NEW: Loan Program Mix
+    loanProgramEntries,
+
+    // turn times
+    avgSubmitToAppComplete,
+    avgAppToProcessing,
+    submitToAppCount: submitToAppComplete.length,
+    appToProcCount: appToProcessing.length
+  };
+}
+
+function renderKpis(k, prior){
+  $("k_pipelineUnits").textContent = String(k.totalUnits);
+  $("k_pipelineVol").textContent   = money(k.totalVol);
+  $("k_avgLoanAmt").textContent    = Number.isFinite(k.avgAmt) ? money(k.avgAmt) : "—";
+  $("k_uniqueLOs").textContent     = String(k.uniqueLOs);
+
+  $("k_appsMTD").textContent       = String(k.appsMTD);
+  $("k_fundedMTD").textContent     = String(k.fundedMTD);
+  $("k_pullThrough").textContent   = Number.isFinite(k.pullThrough) ? pct(k.pullThrough) : "—";
+  $("k_agedLoans").textContent     = String(k.agedLoans);
+
+  $("k_appToDisc").textContent     = Number.isFinite(k.avgAppToDisc) ? k.avgAppToDisc.toFixed(1) : "—";
+  $("k_appToUW").textContent       = Number.isFinite(k.avgAppToUW) ? k.avgAppToUW.toFixed(1) : "—";
+  $("k_appToClose").textContent    = Number.isFinite(k.avgAppToClose) ? k.avgAppToClose.toFixed(1) : "—";
+  $("k_mixPurposeTop").textContent = k.topPurpose === "—" ? "—" : `${k.topPurpose} • ${pct(k.topPurposeShare)}`;
+
+  if (prior){
+    setTrend("t_pipelineUnits", k.totalUnits, prior.totalUnits);
+    setTrend("t_pipelineVol",   k.totalVol,   prior.totalVol);
+    setTrend("t_avgLoanAmt",    k.avgAmt,     prior.avgAmt);
+    setTrend("t_uniqueLOs",     k.uniqueLOs,  prior.uniqueLOs);
+
+    setTrend("t_appsMTD",       k.appsMTD,     prior.appsMTD);
+    setTrend("t_fundedMTD",     k.fundedMTD,   prior.fundedMTD);
+    setTrend("t_pullThrough",   k.pullThrough, prior.pullThrough);
+    setTrend("t_agedLoans",     k.agedLoans,   prior.agedLoans);
+
+    setTrend("t_appToDisc",     k.avgAppToDisc, prior.avgAppToDisc);
+    setTrend("t_appToUW",       k.avgAppToUW,   prior.avgAppToUW);
+    setTrend("t_appToClose",    k.avgAppToClose, prior.avgAppToClose);
+  }
+
+  const tiles = Array.from(document.querySelectorAll(".kpi-tile"));
+  for (const t of tiles) t.classList.remove("health-ok","health-warn","health-bad");
+
+  setHealth(document.querySelector('[data-kpi="t_appToDisc"]'),
+    Number.isFinite(k.avgAppToDisc) ? (k.avgAppToDisc > 5 ? "health-bad" : (k.avgAppToDisc > 3 ? "health-warn" : "health-ok")) : null
+  );
+
+  const agedRatio = k.totalUnits ? (k.agedLoans / k.totalUnits) : NaN;
+  setHealth(document.querySelector('[data-kpi="agedLoans"]'),
+    Number.isFinite(agedRatio) ? (agedRatio > 0.20 ? "health-bad" : (agedRatio > 0.10 ? "health-warn" : "health-ok")) : null
+  );
+}
+
+function renderList(elId, entries, { topN=10, volByKey=null, onClickKey=null } = {}){
+  const el = $(elId);
+  if (!el) return;
+  if (!entries.length){ el.textContent = "—"; return; }
+
+  el.innerHTML = entries.slice(0, topN).map(([k,v]) => {
+    const vol = volByKey ? volByKey[k] : null;
+    return `
+      <div class="list-item ${onClickKey ? "clickable" : ""}" data-key="${escapeHtml(k)}">
+        <div>
+          <b>${escapeHtml(k)}</b>
+          <div class="badge">${v} loans${volByKey ? ` • ${escapeHtml(moneyShort(vol || 0))}` : ""}</div>
+        </div>
+        <div class="right"><b>${v}</b></div>
+      </div>
+    `;
+  }).join("");
+
+  if (onClickKey){
+    el.querySelectorAll(".list-item").forEach(item => {
+      item.addEventListener("click", () => {
+        const key = item.getAttribute("data-key") || "";
+        if (!key) return;
+        onClickKey(key);
+      });
+    });
+  }
+}
+
+function renderBreakdowns(k){
+  barChart("c_milestone", k.milestoneEntries, { maxBars: 12 });
+
+  const loChartEntries = k.loEntries.slice(0, 8).map(([name,count]) => {
+    const vol = k.volByLO[name] || 0;
+    return [`${name} • ${moneyShort(vol)}`, count];
+  });
+  barChart("c_lo", loChartEntries, { maxBars: 8 });
+
+  barChart("c_purpose", k.purposeEntries, { maxBars: 14 });
+
+  // Turn times chart
+  const turnEntries = [
+    ["Loan Submit → Loan App Complete", k.avgSubmitToAppComplete],
+    ["Loan App → Processing", k.avgAppToProcessing]
+  ].filter(e => Number.isFinite(e[1]));
+
+  barChart("c_turnTimes", turnEntries, {
+    maxBars: 10,
+    valueFormat: (v) => v.toFixed(1) + "d"
+  });
+
+  if (!turnEntries.length){
+    log("Turn Times: no usable data found for milestone date fields. Verify field syntax:");
+    log("  ", MS_DATE_LOAN_APP);
+    log("  ", MS_DATE_PROCESSING);
+  } else {
+    log("Turn Times sample counts:", { submitToAppCount: k.submitToAppCount, appToProcCount: k.appToProcCount });
+  }
+
+  renderList("rateTypeList", k.rateBucketEntries, {
+    topN: 12,
+    onClickKey: (bucket) => {
+      const loans = state.drillRateBucket[bucket] || [];
+      openModal({ title: `Rate Type Mix: ${bucket}`, subtitle: `${loans.length} loans`, loans });
+    }
+  });
+
+  // ✅ NEW: Loan Program widget list (must exist in HTML with id="loanProgramList")
+  renderList("loanProgramList", k.loanProgramEntries || [], {
+    topN: 12,
+    onClickKey: (program) => {
+      const loans = state.drillLoanProgram?.[program] || [];
+      openModal({ title: `Loan Program: ${program}`, subtitle: `${loans.length} loans`, loans });
+    }
+  });
+
+  renderList("topLoList", k.loEntries, { topN: 10, volByKey: k.volByLO });
+}
+
+// -----------------------------
+// Drill-through modal (UPDATED to show loan program)
+// -----------------------------
+const modalBackdrop = $("modalBackdrop");
+const modalTitle = $("modalTitle");
+const modalSubtitle = $("modalSubtitle");
+const modalList = $("modalList");
+let currentModalLoans = [];
+
+function openModal({ title, subtitle, loans }){
+  currentModalLoans = loans || [];
+  modalTitle.textContent = title;
+  modalSubtitle.textContent = subtitle;
+
+  if (!currentModalLoans.length){
+    modalList.innerHTML = `<div class="muted">No loans matched.</div>`;
+  } else {
+    modalList.innerHTML = currentModalLoans.slice(0, 250).map(l => {
+      const num = safe(l.loanNumber,"");
+      const amt = Number.isFinite(l.amt) ? moneyShort(l.amt) : "—";
+      const app = l.appDate ? l.appDate.toLocaleDateString() : "—";
+      const ms = safe(l.milestone, "—");
+      const purpose = l.purpose ? l.purpose : "—";
+      const loanType = l.loanType ? l.loanType : "—";
+      const amort = l.amortType ? l.amortType : "—";
+      const program = l.loanProgram ? l.loanProgram : "—";
+
+      return `
+        <div class="list-item">
+          <div>
+            <b class="mono">${escapeHtml(num || "(no loan #)")}</b>
+            <div class="badge">${escapeHtml(l.lo)} • ${escapeHtml(amort)} • ${escapeHtml(purpose)} • ${escapeHtml(loanType)} • ${escapeHtml(program)} • ${escapeHtml(ms)} • App: ${escapeHtml(app)}</div>
           </div>
-        `;
-      }).join("");
+          <div class="right"><b>${escapeHtml(amt)}</b></div>
+        </div>
+      `;
+    }).join("");
 
-      if (onClickKey){
-        el.querySelectorAll(".list-item").forEach(item => {
-          item.addEventListener("click", () => {
-            const key = item.getAttribute("data-key") || "";
-            if (!key) return;
-            onClickKey(key);
-          });
-        });
-      }
+    if (currentModalLoans.length > 250){
+      modalList.innerHTML += `<div class="muted">Showing first 250 of ${currentModalLoans.length} loans.</div>`;
     }
+  }
 
-    function renderBreakdowns(k){
-      barChart("c_milestone", k.milestoneEntries, { maxBars: 12 });
-
-      const loChartEntries = k.loEntries.slice(0, 8).map(([name,count]) => {
-        const vol = k.volByLO[name] || 0;
-        return [`${name} • ${moneyShort(vol)}`, count];
-      });
-      barChart("c_lo", loChartEntries, { maxBars: 8 });
-
-      barChart("c_purpose", k.purposeEntries, { maxBars: 14 });
-
-      // Turn times chart (NEW)
-      const turnEntries = [
-        ["Loan Submit → Loan App Complete", k.avgSubmitToAppComplete],
-        ["Loan App → Processing", k.avgAppToProcessing]
-      ].filter(e => Number.isFinite(e[1]));
-
-      barChart("c_turnTimes", turnEntries, {
-        maxBars: 10,
-        valueFormat: (v) => v.toFixed(1) + "d"
-      });
-
-      if (!turnEntries.length){
-        log("Turn Times: no usable data found for milestone date fields. Verify field syntax:");
-        log("  ", MS_DATE_LOAN_APP);
-        log("  ", MS_DATE_PROCESSING);
-      } else {
-        log("Turn Times sample counts:",
-          { submitToAppCount: k.submitToAppCount, appToProcCount: k.appToProcCount }
-        );
-      }
-
-      renderList("rateTypeList", k.rateBucketEntries, {
-        topN: 12,
-        onClickKey: (bucket) => {
-          const loans = state.drillRateBucket[bucket] || [];
-          openModal({ title: `Rate Type Mix: ${bucket}`, subtitle: `${loans.length} loans`, loans });
-        }
-      });
-
-      renderList("topLoList", k.loEntries, { topN: 10, volByKey: k.volByLO });
-    }
-
-    // -----------------------------
-    // Drill-through modal
-    // -----------------------------
-    const modalBackdrop = $("modalBackdrop");
-    const modalTitle = $("modalTitle");
-    const modalSubtitle = $("modalSubtitle");
-    const modalList = $("modalList");
-    let currentModalLoans = [];
-
-    function openModal({ title, subtitle, loans }){
-      currentModalLoans = loans || [];
-      modalTitle.textContent = title;
-      modalSubtitle.textContent = subtitle;
-
-      if (!currentModalLoans.length){
-        modalList.innerHTML = `<div class="muted">No loans matched.</div>`;
-      } else {
-        modalList.innerHTML = currentModalLoans.slice(0, 250).map(l => {
-          const num = safe(l.loanNumber,"");
-          const amt = Number.isFinite(l.amt) ? moneyShort(l.amt) : "—";
-          const app = l.appDate ? l.appDate.toLocaleDateString() : "—";
-          const ms = safe(l.milestone, "—");
-          const purpose = l.purpose ? l.purpose : "—";
-          const loanType = l.loanType ? l.loanType : "—";
-          const amort = l.amortType ? l.amortType : "—";
-          return `
-            <div class="list-item">
-              <div>
-                <b class="mono">${escapeHtml(num || "(no loan #)")}</b>
-                <div class="badge">${escapeHtml(l.lo)} • ${escapeHtml(amort)} • ${escapeHtml(purpose)} • ${escapeHtml(loanType)} • ${escapeHtml(ms)} • App: ${escapeHtml(app)}</div>
-              </div>
-              <div class="right"><b>${escapeHtml(amt)}</b></div>
-            </div>
-          `;
-        }).join("");
-
-        if (currentModalLoans.length > 250){
-          modalList.innerHTML += `<div class="muted">Showing first 250 of ${currentModalLoans.length} loans.</div>`;
-        }
-      }
-
-      modalBackdrop.classList.add("open");
-    }
+  modalBackdrop.classList.add("open");
+}
 
     $("btnCloseModal").addEventListener("click", ()=> modalBackdrop.classList.remove("open"));
     modalBackdrop.addEventListener("click", (e)=> { if (e.target === modalBackdrop) modalBackdrop.classList.remove("open"); });
@@ -1703,6 +1727,7 @@ pre{
           "Fields.748",
           "Fields.2301",
           "Fields.1172",
+          "Fields.1401",
 
           // milestone canonical fields
           MS_DATE_LOAN_APP,
