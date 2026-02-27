@@ -395,6 +395,9 @@ canvas{
   border:1px solid rgba(17,17,17,.14);
   box-shadow: 0 25px 70px rgba(0,0,0,.25);
   padding:14px;
+  max-height: min(82vh, 760px);
+  display:flex;
+  flex-direction:column;
 }
 .modal h3{
   margin:0;
@@ -408,7 +411,11 @@ canvas{
   align-items:center;
   flex-wrap:wrap;
 }
-.modal-body{ margin-top:10px; }
+.modal-body{ 
+  margin-top:10px;
+    overflow:auto;
+  min-height: 0;
+ }
 
 .mono{
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -1294,6 +1301,9 @@ pre{
     const MS_DATE_LOAN_APP = "Fields.Log.MS.Date.Loan App";
     const MS_DATE_PROCESSING = "Fields.Log.MS.Date.Processing";
     const MS_DATE_APPROVAL = "Fields.Log.MS.Date.Approval";
+    const MS_DATE_COND_APPROVAL = "Fields.Log.MS.Date.Cond. Approval";
+    const MS_DATE_RESUBMITTAL   = "Fields.Log.MS.Date.Resubmittal";
+    const MS_DATE_CLOSING       = "Fields.Log.MS.Date.Closing";
     $("msFieldLoanApp").textContent = MS_DATE_LOAN_APP;
     $("msFieldProcessing").textContent = MS_DATE_PROCESSING;
 
@@ -1317,7 +1327,9 @@ pre{
       const discDate = parseDate(getField(loan, "Fields.3142"));
       const closeDate = parseDate(getField(loan, "Fields.748"));
       const uwDate = parseDate(getField(loan, "Fields.2301"));
-
+      const msCondApprovalDate = parseDate(getField(loan, MS_DATE_COND_APPROVAL));
+      const msResubmittalDate  = parseDate(getField(loan, MS_DATE_RESUBMITTAL));
+      const msClosingDate      = parseDate(getField(loan, MS_DATE_CLOSING));
       const startedDate = parseDate(getField(loan, "Fields.Log.MS.Date.Started"));
 
       const msLoanAppDate = parseDate(getField(loan, MS_DATE_LOAN_APP));
@@ -1341,6 +1353,9 @@ pre{
         discDate,
         closeDate,
         uwDate,
+        msCondApprovalDate,
+        msResubmittalDate,
+        msClosingDate,
         startedDate,
         msLoanAppDate,
         msProcessingDate,
@@ -1478,8 +1493,28 @@ pre{
         .map(l => daysBetween(l.msLoanAppDate, l.msProcessingDate))
         .filter(d => Number.isFinite(d) && d >= 0);
 
+      const processingToCondApproval = loans
+      .map(l => daysBetween(l.msProcessingDate, l.msCondApprovalDate))
+      .filter(d => Number.isFinite(d) && d >= 0);
+
+    const condApprovalToResubmittal = loans
+      .map(l => daysBetween(l.msCondApprovalDate, l.msResubmittalDate))
+      .filter(d => Number.isFinite(d) && d >= 0);
+
+    const resubmitToApproval = loans
+      .map(l => daysBetween(l.msResubmittalDate, l.msApprovalDate))
+      .filter(d => Number.isFinite(d) && d >= 0);
+
+    const approvalToClosing = loans
+      .map(l => daysBetween(l.msApprovalDate, l.msClosingDate))
+      .filter(d => Number.isFinite(d) && d >= 0);
+
       const avgSubmitToAppComplete = avg(submitToAppComplete);
       const avgAppToProcessing = avg(appToProcessing);
+      const avgProcessingToCondApproval    = avg(processingToCondApproval);
+      const avgCondApprovalToResubmittal   = avg(condApprovalToResubmittal);
+      const avgResubmitToApproval          = avg(resubmitToApproval);
+      const avgApprovalToClosing           = avg(approvalToClosing);
 
       state.drill = {
         pipelineUnits: loans,
@@ -1509,6 +1544,10 @@ pre{
         avgSubmitToAppComplete,
         avgAppToProcessing,
         submitToAppCount: submitToAppComplete.length,
+        avgProcessingToCondApproval,
+        avgCondApprovalToResubmittal,
+        avgResubmitToApproval,
+        avgApprovalToClosing,
         appToProcCount: appToProcessing.length
       };
     }
@@ -1588,7 +1627,7 @@ pre{
     }
 
     function renderBreakdowns(k){
-      barChart("c_milestone", k.milestoneEntries, { maxBars: 12 });
+      barChart("c_milestone", k.milestoneEntries, { maxBars: 10 });
 
       // Removed Loans by Loan Officer chart per request
 
@@ -1597,7 +1636,12 @@ pre{
       // Turn times chart with overlay labels on bars
       const turnEntries = [
         ["Loan Submit → Loan App Complete", k.avgSubmitToAppComplete],
-        ["Loan App → Processing", k.avgAppToProcessing]
+        ["Loan App → Processing", k.avgAppToProcessing],
+
+        ["Process → Cond. Approval", k.avgProcessingToCondApproval],
+        ["Cond. Approval → Resubmittal", k.avgCondApprovalToResubmittal],
+        ["Resubmit → Approval", k.avgResubmitToApproval],
+        ["Approval → Closing", k.avgApprovalToClosing]
       ].filter(e => Number.isFinite(e[1]));
 
       barChartOverlayLabels("c_turnTimes", turnEntries, {
@@ -1797,7 +1841,10 @@ pre{
 
           MS_DATE_LOAN_APP,
           MS_DATE_PROCESSING,
-          MS_DATE_APPROVAL
+          MS_DATE_APPROVAL,
+          MS_DATE_COND_APPROVAL,
+          MS_DATE_RESUBMITTAL,
+          MS_DATE_CLOSING
         ].filter(f => !canonicalFieldSet.size || canonicalFieldSet.has(f));
 
         const raw = await fetchPipelineLoans({ token, folderNames: folders, limit, fields });
