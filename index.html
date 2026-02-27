@@ -102,9 +102,15 @@
     <div class="card warn">
       <div class="kpi-label">By Loan Purpose (Field 19)</div>
       <div class="kpi-value" style="font-size:14px; font-weight:600;" id="pipeByPurpose">—</div>
-      <div class="kpi-sub">Grouped by <code>Fields.19</code></div>
+      <div class="kpi-sub">Grouped by <code>Fields.19</code> (Null bucket if missing)</div>
     </div>
-  </div>
+
+    <div class="card warn" style="grid-column: 1 / -1;">
+      <div class="kpi-label">Loan Purpose (Field 19) – Bar Chart</div>
+      <canvas id="purposeChart" height="140"></canvas>
+      <div class="kpi-sub">Bars are counts per purpose</div>
+    </div>
+  </div><!-- ✅ END GRID -->
 
   <div class="card" style="margin-top:12px;">
     <details open>
@@ -114,6 +120,7 @@
   </div>
 
   <script>
+    // ---------- Logging ----------
     const debugEl = document.getElementById("debug");
     const log = (...args) => {
       const line = args.map(a => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
@@ -124,6 +131,7 @@
     const ssfLoaded = (window.elli && elli.script);
     document.getElementById("ssfStatus").textContent = ssfLoaded ? "Loaded ✅" : "NOT loaded ❌";
 
+    // ---------- Guest init ----------
     (function initGuestOnce() {
       if (!ssfLoaded) {
         document.getElementById("guestStatus").textContent = "SSF not loaded ❌";
@@ -173,6 +181,7 @@
 
     const API_SERVER = "https://api.elliemae.com";
 
+    // ---------- Folder dropdown ----------
     const folderSelect = document.getElementById("folderSelect");
     const folderStatus = document.getElementById("folderStatus");
     const resolvedFolderNameEl = document.getElementById("resolvedFolderName");
@@ -241,11 +250,19 @@
       document.getElementById("pipeByStatus").textContent = "—";
       document.getElementById("pipeByPurpose").textContent = "—";
 
+      // clear chart
+      const c = document.getElementById("purposeChart");
+      if (c) {
+        const ctx = c.getContext("2d");
+        ctx.clearRect(0, 0, c.width, c.height);
+      }
+
       log("Folder selected:", selectedFolderName || "(none)");
     }
 
     folderSelect.addEventListener("change", onFolderChanged);
 
+    // ---------- Debug helpers ----------
     function summarizeJsonShape(json) {
       const keys = json && typeof json === "object" ? Object.keys(json) : [];
       const counts = {
@@ -268,6 +285,60 @@
       return [];
     }
 
+    // ---------- Chart helper ----------
+    function renderPurposeBarChart(byPurpose) {
+      const labels = Object.keys(byPurpose);
+      const data = labels.map(k => byPurpose[k]);
+
+      const canvas = document.getElementById("purposeChart");
+      if (!canvas) return;
+
+      const ctx = canvas.getContext("2d");
+
+      // responsive width
+      const parentWidth = canvas.parentElement?.clientWidth || 600;
+      canvas.width = Math.max(320, parentWidth - 24);
+
+      const w = canvas.width;
+      const h = canvas.height;
+
+      // clear
+      ctx.clearRect(0, 0, w, h);
+
+      if (!labels.length) {
+        ctx.fillText("No data", 10, 20);
+        return;
+      }
+
+      const maxVal = Math.max(...data, 1);
+      const padding = 28;
+      const barGap = 10;
+      const barWidth = Math.max(10, (w - padding * 2 - barGap * (labels.length - 1)) / labels.length);
+      const baseline = h - padding;
+
+      // baseline
+      ctx.beginPath();
+      ctx.moveTo(padding, baseline);
+      ctx.lineTo(w - padding, baseline);
+      ctx.stroke();
+
+      labels.forEach((label, i) => {
+        const val = data[i];
+        const barHeight = Math.round((val / maxVal) * (h - padding * 2));
+        const x = padding + i * (barWidth + barGap);
+        const y = baseline - barHeight;
+
+        ctx.fillRect(x, y, barWidth, barHeight);
+
+        // value
+        ctx.fillText(String(val), x, Math.max(12, y - 6));
+
+        // label
+        const short = label.length > 12 ? label.slice(0, 12) + "…" : label;
+        ctx.fillText(short, x, h - 10);
+      });
+    }
+
     // -------- V3 pipeline KPIs --------
     async function refreshPipelineKpis() {
       if (!selectedFolderName) {
@@ -279,9 +350,9 @@
       const limit = Math.max(1, Math.min(1000, Number(document.getElementById("pipeLimit").value || 1000)));
       const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
 
-      // IMPORTANT UPDATES:
-      // - Request CurrentMilestone from Fields.Log.MS.CurrentMilestone (instead of Loan.MilestoneName)
-      // - Request Loan Purpose from Fields.19 (Field 19)
+      // Updates:
+      // - CurrentMilestone: Fields.Log.MS.CurrentMilestone
+      // - Loan Purpose: Fields.19
       const body = {
         fields: [
           "Loan.LoanAmount",
@@ -325,11 +396,6 @@
       const loans = pickFirstArray(json);
       log("V3 detected loans array length:", String(loans.length));
 
-      if (loans.length > 0) {
-        log("V3 sample loan[0]:", loans[0]);
-        if (loans.length > 1) log("V3 sample loan[1]:", loans[1]);
-      }
-
       // KPI calculations
       let total = 0;
       const byMilestone = {};
@@ -345,7 +411,6 @@
         const amt = Number(String(amtVal ?? "").replace(/,/g, ""));
         if (isFinite(amt)) total += amt;
 
-        // UPDATED: Current milestone from Fields.Log.MS.CurrentMilestone
         const msVal =
           l?.fields?.["Fields.Log.MS.CurrentMilestone"] ??
           l?.fields?.["Loan.MilestoneName"] ??
@@ -354,13 +419,12 @@
         const ms = String(msVal ?? "").trim() || "Unknown";
         byMilestone[ms] = (byMilestone[ms] || 0) + 1;
 
-        // NEW: Loan purpose from Field 19
         const purposeVal =
           l?.fields?.["Fields.19"] ??
           l?.fields?.["Loan.LoanPurpose"] ??
-          l?.LoanPurpose ?? l?.loanPurpose ?? "Unknown";
+          l?.LoanPurpose ?? l?.loanPurpose ?? null;
 
-        const purpose = String(purposeVal ?? "").trim() || "Unknown";
+        const purpose = String(purposeVal ?? "").trim() || "Null";
         byPurpose[purpose] = (byPurpose[purpose] || 0) + 1;
       }
 
@@ -379,9 +443,16 @@
           .map(([k,v]) => `${k}: ${v}`)
           .join(" | ") || "—";
 
+      renderPurposeBarChart(
+        Object.fromEntries(
+          Object.entries(byPurpose).sort((a,b) => b[1] - a[1])
+        )
+      );
+
       log("Pipeline KPIs refreshed ✅");
     }
 
+    // ---------- Buttons ----------
     document.getElementById("btnPipeline").addEventListener("click", () => {
       refreshPipelineKpis().catch(e => {
         log("Pipeline KPI ERROR:", e.message);
@@ -397,6 +468,7 @@
       log("Debug cleared ✅");
     });
 
+    // ---------- On load ----------
     (async function init() {
       try {
         await loadFoldersIntoDropdown();
