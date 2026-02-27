@@ -1365,16 +1365,32 @@
 
       const filtered = applyFilters(normalized);
 
-      log("---- Milestone Started Date (KPI Loans Only) ----");
+      log("---- Milestone Date Debug (KPI Loans Only) ----");
 
       filtered.forEach(l => {
-        if (!l.startedDate) return;
-
         log({
           loanNumber: l.loanNumber,
           loanOfficer: l.lo,
-          appDate: l.appDate ? l.appDate.toLocaleDateString() : null,
-          milestoneStarted: l.startedDate.toLocaleDateString()
+
+          // Field 745
+          appDate_745: l.appDate
+            ? l.appDate.toLocaleDateString()
+            : null,
+
+          // Milestone: Started
+          milestoneStarted: l.startedDate
+            ? l.startedDate.toLocaleDateString()
+            : null,
+
+          // Milestone: Loan App
+          milestoneLoanApp: l.msLoanAppDate
+            ? l.msLoanAppDate.toLocaleDateString()
+            : null,
+
+          // Milestone: Processing
+          milestoneProcessing: l.msProcessingDate
+            ? l.msProcessingDate.toLocaleDateString()
+            : null
         });
       });
       state.loansRaw = normalized;
