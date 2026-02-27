@@ -415,6 +415,10 @@ pre{
   overflow:auto;
   border: 1px solid rgba(17,17,17,.06);
 }
+.section { display:flex; flex-direction:column; gap:8px; }
+.section-head { display:flex; flex-direction:column; gap:2px; }
+.section-title { font-size:13px; font-weight:800; letter-spacing:.2px; }
+.section-sub { font-size:12px; color:var(--muted); }
   </style>
 </head>
 
@@ -588,9 +592,25 @@ pre{
       <div class="kpi-sub">Grouped by <code>Fields.317</code> (label includes volume)</div>
     </div>
     <div class="card span-6">
-      <div class="kpi-label">Loan Program</div>
-      <div class="list" id="loanProgramList">—</div>
-      <div class="kpi-sub">Grouped by <code>Fields.1401</code>. Click a program to drill-through.</div>
+      <div class="kpi-label">Product Mix</div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="section-title">Loan Type</div>
+          <div class="section-sub">Click a bucket to drill-through.</div>
+        </div>
+        <div class="list" id="rateTypeList">—</div>
+      </div>
+
+      <div class="divider" style="margin:12px 0;"></div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="section-title">Loan Program Mix</div>
+          <div class="section-sub">Click a program to drill-through.</div>
+        </div>
+        <div class="list" id="loanProgramList">—</div>
+      </div>
     </div>
     <div class="card span-12">
       <div class="kpi-label">Milestone Turn Times (Average Days)</div>
@@ -609,11 +629,6 @@ pre{
       <div class="kpi-sub">Grouped by <code>Fields.19</code> (Unknown excluded)</div>
     </div>
 
-    <div class="card span-6">
-      <div class="kpi-label">Loan Types</div>
-      <div class="list" id="rateTypeList">—</div>
-      <div class="kpi-sub">Click a bucket to drill-through.</div>
-    </div>
 
     <div class="card span-6">
       <div class="kpi-label">Top Loan Officers</div>
