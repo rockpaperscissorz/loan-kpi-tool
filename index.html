@@ -164,7 +164,7 @@ code{
   box-shadow: none;
 }
 
-/* Optional primary style (apply by adding class="btn primary") */
+/* Optional primary style */
 .btn.primary{
   background:#111;
   color:#fff;
@@ -275,6 +275,12 @@ code{
   margin-bottom:6px;
   letter-spacing:.25px;
 }
+.kpi-label.chart-title{
+  font-size:18px;            /* ✅ larger titles requested */
+  font-weight:900;
+  letter-spacing:.2px;
+}
+
 .kpi-value{
   font-size:26px;
   font-weight:800;
@@ -425,15 +431,17 @@ pre{
 <body>
   <div class="card">
     <h1>Pipeline KPI Dashboard</h1>
-    <div class="muted">
-      Folder list via <code>/encompass/v3/loanFolders</code>. Pipeline data via <code>/encompass/v3/loanPipeline</code>.
-      Loan Officers via <code>/encompass/v1/company/users</code> (filtered by persona “Loan Officer”).
-    </div>
 
     <div class="toolbar">
       <div class="row">
+        <!-- SSF: Loaded Pill (commented out per request)
         <span class="pill"><b>SSF</b>: <span id="ssfStatus">Checking…</span></span>
+        -->
+
+        <!-- Guest: Ready Pill (commented out per request)
         <span class="pill"><b>Guest</b>: <span id="guestStatus">Not started</span></span>
+        -->
+
         <span class="pill"><b>Folders</b>: <span id="folderStatus">Not loaded</span></span>
         <span class="pill"><b>LOs</b>: <span id="loStatus">Not loaded</span></span>
         <span class="pill"><b>Last refresh</b>: <span id="lastRefresh">—</span></span>
@@ -465,7 +473,7 @@ pre{
         <label class="muted">Aging threshold (days)</label>
         <input id="ageDays" class="input" type="number" min="1" max="365" value="45" />
       </div>
-      </div>
+    </div>
 
     <div class="divider"></div>
 
@@ -474,6 +482,11 @@ pre{
       <div class="field">
         <label class="muted">Loan Officer</label>
         <div class="ms" data-ms="lo"></div>
+      </div>
+
+      <div class="field">
+        <label class="muted">State (12)</label>
+        <div class="ms" data-ms="state"></div>
       </div>
 
       <div class="field">
@@ -497,9 +510,7 @@ pre{
       </div>
     </div>
 
-    <div class="muted" style="margin-top:10px;">
-      Filters support multi-select. Empty selection = “All”. (Unknown/blank for 19 & 1172 are excluded from filter options.)
-    </div>
+    <!-- Removed helper text per request -->
   </div>
 
   <!-- KPI tiles -->
@@ -526,7 +537,7 @@ pre{
     <div class="card span-3 kpi-tile" data-kpi="uniqueLOs">
       <div class="kpi-label">Unique Loan Officers</div>
       <div class="kpi-value" id="k_uniqueLOs">—</div>
-      <div class="kpi-sub"><span id="t_uniqueLOs" class="trend"></span><span class="muted">Distinct Fields.317</span></div>
+      <div class="kpi-sub"><span id="t_uniqueLOs" class="trend"></span><span class="muted"></span></div>
     </div>
 
     <!-- Row 2 -->
@@ -581,26 +592,22 @@ pre{
 
     <!-- Charts / lists -->
     <div class="card span-6">
-      <div class="kpi-label">Loans by Milestone</div>
+      <div class="kpi-label chart-title">Loans by Milestone</div>
       <canvas id="c_milestone" height="180"></canvas>
       <div class="kpi-sub">Grouped by <code>Fields.Log.MS.CurrentMilestone</code></div>
     </div>
 
-    <div class="card span-6">
-      <div class="kpi-label">Loans by Loan Officer</div>
-      <canvas id="c_lo" height="180"></canvas>
-      <div class="kpi-sub">Grouped by <code>Fields.317</code> (label includes volume)</div>
-    </div>
+    <!-- Removed Loans by Loan Officer Bar Chart per request -->
 
     <!-- Row 2 -->
     <div class="card span-6">
-      <div class="kpi-label">Loan Purpose Distribution</div>
+      <div class="kpi-label chart-title">Loan Purpose Distribution</div>
       <canvas id="c_purpose" height="160"></canvas>
       <div class="kpi-sub">Grouped by <code>Fields.19</code> (Unknown excluded)</div>
     </div>
 
     <div class="card span-6">
-      <div class="kpi-label">Milestone Turn Times (Average Days)</div>
+      <div class="kpi-label chart-title">Milestone Turn Times (Average Days)</div>
       <canvas id="c_turnTimes" height="160"></canvas>
       <div class="kpi-sub">
         Using milestone date fields:
@@ -614,16 +621,7 @@ pre{
     <div class="card span-6">
       <div class="kpi-label">Product Mix</div>
 
-      <div class="section">
-        <div class="section-head centered">
-          <div class="section-title">Loan Type</div>
-          <div class="section-sub">Buckets • Click to drill-through</div>
-        </div>
-        <div class="list" id="rateTypeList">—</div>
-      </div>
-
-      <div class="divider"></div>
-
+      <!-- Removed "Loan Type" section from Product Mix per request -->
       <div class="section">
         <div class="section-head centered">
           <div class="section-title">Loan Program</div>
@@ -682,24 +680,29 @@ pre{
     // -----------------------------
     // SSF + Guest init
     // -----------------------------
+    const API_SERVER = "https://api.elliemae.com";
+    const $ = (id) => document.getElementById(id);
+
+    // SSF pill commented out → guard these DOM updates so code doesn't error
     const ssfLoaded = !!(window.elli && elli.script);
-    document.getElementById("ssfStatus").textContent = ssfLoaded ? "Loaded ✅" : "Not loaded ❌";
+    if ($("ssfStatus")) $("ssfStatus").textContent = ssfLoaded ? "Loaded ✅" : "Not loaded ❌";
 
     (function initGuest(){
-      if (!ssfLoaded) { document.getElementById("guestStatus").textContent = "SSF missing ❌"; return; }
-      if (window.__kpi_guest_ready) { document.getElementById("guestStatus").textContent = "Ready ✅"; return; }
+      // Guest pill commented out → guard these DOM updates so code doesn't error
+      if (!ssfLoaded) { if ($("guestStatus")) $("guestStatus").textContent = "SSF missing ❌"; return; }
+      if (window.__kpi_guest_ready) { if ($("guestStatus")) $("guestStatus").textContent = "Ready ✅"; return; }
 
       try{
         if (elli?.script?.guest?.create){
           elli.script.guest.create("", document.head);
           window.__kpi_guest_ready = true;
-          document.getElementById("guestStatus").textContent = "Ready ✅";
+          if ($("guestStatus")) $("guestStatus").textContent = "Ready ✅";
           log("Guest initialized.");
         } else {
-          document.getElementById("guestStatus").textContent = "guest.create missing ⚠️";
+          if ($("guestStatus")) $("guestStatus").textContent = "guest.create missing ⚠️";
         }
       }catch(e){
-        document.getElementById("guestStatus").textContent = `Init failed ❌ (${e.message})`;
+        if ($("guestStatus")) $("guestStatus").textContent = `Init failed ❌ (${e.message})`;
         log("Guest init error:", e.message);
       }
     })();
@@ -707,9 +710,6 @@ pre{
     // -----------------------------
     // Utilities
     // -----------------------------
-    const API_SERVER = "https://api.elliemae.com";
-    const $ = (id) => document.getElementById(id);
-
     const toNumber = (v) => {
       const n = Number(String(v ?? "").replace(/,/g,"").trim());
       return Number.isFinite(n) ? n : NaN;
@@ -907,18 +907,27 @@ pre{
       document.querySelector('[data-ms="lo"]'),
       { placeholder: "All LOs", onChange: () => refresh().catch(e => log("Auto refresh error (LO change):", e.message)) }
     );
+
+    const msState = createMultiSelect(
+      document.querySelector('[data-ms="state"]'),
+      { placeholder: "All States", onChange: () => refresh().catch(e => log("Auto refresh error (State change):", e.message)) }
+    );
+
     const msAmort = createMultiSelect(
       document.querySelector('[data-ms="amort"]'),
       { placeholder: "All Amort Types", onChange: () => refresh().catch(e => log("Auto refresh error (Amort change):", e.message)) }
     );
+
     const msPurpose = createMultiSelect(
       document.querySelector('[data-ms="purpose"]'),
       { placeholder: "All Purposes", onChange: () => refresh().catch(e => log("Auto refresh error (Purpose change):", e.message)) }
     );
+
     const msRateType = createMultiSelect(
       document.querySelector('[data-ms="rateType"]'),
       { placeholder: "All Loan Types", onChange: () => refresh().catch(e => log("Auto refresh error (Loan Type change):", e.message)) }
     );
+
     const msMilestone = createMultiSelect(
       document.querySelector('[data-ms="milestone"]'),
       { placeholder: "All Milestones", onChange: () => refresh().catch(e => log("Auto refresh error (Milestone change):", e.message)) }
@@ -983,7 +992,7 @@ pre{
     }
 
     // -----------------------------
-    // Loan Officer loading (NEW)
+    // Loan Officer loading
     // -----------------------------
     function extractUsers(payload){
       if (Array.isArray(payload)) return payload;
@@ -996,61 +1005,50 @@ pre{
       const personas = Array.isArray(u?.personas) ? u.personas : [];
       return personas.some(p => String(p?.entityName || "").toLowerCase() === "loan officer");
     }
-      let canonicalFieldSet = new Set(); // holds canonicalName strings
 
-      function extractCanonicalFields(payload){
-        if (Array.isArray(payload)) return payload;
-        if (Array.isArray(payload?.items)) return payload.items;
-        if (Array.isArray(payload?.canonicalFields)) return payload.canonicalFields;
-        return [];
+    let canonicalFieldSet = new Set();
+
+    function extractCanonicalFields(payload){
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload?.items)) return payload.items;
+      if (Array.isArray(payload?.canonicalFields)) return payload.canonicalFields;
+      return [];
+    }
+
+    async function loadPipelineCanonicalFields(){
+      const token = await getAccessToken();
+      const url = `${API_SERVER}/encompass/v3/loanPipeline/canonicalFields`;
+
+      log("GET pipeline canonicalFields:", url);
+
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const text = await r.text();
+
+      if (!r.ok){
+        log("canonicalFields error status:", r.status);
+        log("canonicalFields error body:", text.slice(0, 2000));
+        throw new Error(`canonicalFields failed (${r.status})`);
       }
 
-      async function loadPipelineCanonicalFields(){
-        const token = await getAccessToken();
-        const url = `${API_SERVER}/encompass/v3/loanPipeline/canonicalFields`;
+      let json;
+      try { json = JSON.parse(text); } catch { throw new Error("canonicalFields returned non-JSON"); }
 
-        log("GET pipeline canonicalFields:", url);
+      const items = extractCanonicalFields(json);
 
-        const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-        const text = await r.text();
+      canonicalFieldSet = new Set(
+        items
+          .map(x => String(x?.canonicalName || "").trim())
+          .filter(Boolean)
+      );
 
-        if (!r.ok){
-          log("canonicalFields error status:", r.status);
-          log("canonicalFields error body:", text.slice(0, 2000));
-          throw new Error(`canonicalFields failed (${r.status})`);
-        }
+      log("canonicalFields loaded:", canonicalFieldSet.size);
+    }
 
-        let json;
-        try { json = JSON.parse(text); } catch { throw new Error("canonicalFields returned non-JSON"); }
-
-        const items = extractCanonicalFields(json);
-
-        canonicalFieldSet = new Set(
-          items
-            .map(x => String(x?.canonicalName || "").trim())
-            .filter(Boolean)
-        );
-
-        log("canonicalFields loaded:", canonicalFieldSet.size);
-
-        // Validate your milestone fields exist
-        const mustHave = [
-          "Fields.Log.MS.Date.Started",
-          "Fields.Log.MS.Date.Loan App",
-          "Fields.Log.MS.Date.Processing",
-          "Fields.Log.MS.Date.Approval"
-        ];
-
-        mustHave.forEach(f => {
-          log(`canonicalFields contains ${f}?`, canonicalFieldSet.has(f));
-        });
-      }
     async function loadLoanOfficers(){
       loStatus.textContent = "Loading…";
 
       const token = await getAccessToken();
 
-      // NOTE: some tenants may paginate; we’ll loop safely
       const limit = 1000;
       let start = 0;
       let all = [];
@@ -1075,11 +1073,8 @@ pre{
         const chunk = extractUsers(json);
         all = all.concat(chunk);
 
-        // stop if chunk smaller than limit or no chunk
         if (!chunk.length || chunk.length < limit) break;
         start += limit;
-
-        // safety brake (avoid runaway)
         if (start > 20000) break;
       }
 
@@ -1142,7 +1137,7 @@ pre{
     // -----------------------------
     // Chart rendering (simple bars)
     // -----------------------------
-    function barChart(canvasId, entries, { maxBars=12, valueFormat=null } = {}){
+    function barChart(canvasId, entries, { maxBars=12, valueFormat=null, drawXAxisLabels=true } = {}){
       const c = $(canvasId);
       if (!c) return;
 
@@ -1154,6 +1149,9 @@ pre{
       const h = c.height;
 
       ctx.clearRect(0,0,w,h);
+      ctx.font = "12px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif";
+      ctx.fillStyle = "#111";
+      ctx.strokeStyle = "rgba(17,17,17,.35)";
 
       const top = (entries || []).slice(0, maxBars);
       if (!top.length){
@@ -1174,6 +1172,8 @@ pre{
       ctx.lineTo(w - pad, base);
       ctx.stroke();
 
+      // Bars
+      ctx.fillStyle = "rgba(17,17,17,.80)";
       top.forEach(([label, value], i) => {
         const v = Number(value) || 0;
         const bh = Math.round((v / maxVal) * (h - pad*2));
@@ -1182,11 +1182,79 @@ pre{
 
         ctx.fillRect(x, y, bw, bh);
 
+        // value label (above bar)
+        ctx.fillStyle = "#111";
         const t = valueFormat ? valueFormat(v) : (Number.isInteger(v) ? String(v) : v.toFixed(1));
         ctx.fillText(t, x, Math.max(12, y - 6));
 
-        const short = String(label).length > 22 ? String(label).slice(0,22)+"…" : String(label);
-        ctx.fillText(short, x, h - 10);
+        // x labels (bottom)
+        if (drawXAxisLabels){
+          const short = String(label).length > 22 ? String(label).slice(0,22)+"…" : String(label);
+          ctx.fillText(short, x, h - 10);
+        }
+
+        ctx.fillStyle = "rgba(17,17,17,.80)";
+      });
+    }
+
+    // ✅ TurnTimes special: overlay the label ON the bar
+    function barChartOverlayLabels(canvasId, entries, { maxBars=10, valueFormat=null } = {}){
+      const c = $(canvasId);
+      if (!c) return;
+
+      const parentW = c.parentElement?.clientWidth || 900;
+      c.width = Math.max(520, parentW - 20);
+
+      const ctx = c.getContext("2d");
+      const w = c.width;
+      const h = c.height;
+
+      ctx.clearRect(0,0,w,h);
+      ctx.font = "12px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif";
+      ctx.strokeStyle = "rgba(17,17,17,.35)";
+
+      const top = (entries || []).slice(0, maxBars);
+      if (!top.length){
+        ctx.fillStyle = "#111";
+        ctx.fillText("No data", 10, 18);
+        return;
+      }
+
+      const vals = top.map(e => Number(e[1]) || 0);
+      const maxVal = Math.max(...vals, 1);
+
+      const pad = 26;
+      const gap = 16;
+      const bw = Math.max(90, (w - pad*2 - gap*(top.length-1)) / top.length); // wider bars to fit text
+      const base = h - pad;
+
+      ctx.beginPath();
+      ctx.moveTo(pad, base);
+      ctx.lineTo(w - pad, base);
+      ctx.stroke();
+
+      top.forEach(([label, value], i) => {
+        const v = Number(value) || 0;
+        const bh = Math.round((v / maxVal) * (h - pad*2));
+        const x = pad + i*(bw+gap);
+        const y = base - bh;
+
+        // bar
+        ctx.fillStyle = "rgba(17,17,17,.82)";
+        ctx.fillRect(x, y, bw, bh);
+
+        // value above bar
+        ctx.fillStyle = "#111";
+        const t = valueFormat ? valueFormat(v) : (Number.isInteger(v) ? String(v) : v.toFixed(1));
+        ctx.fillText(t, x, Math.max(12, y - 6));
+
+        // label inside bar (overlay)
+        // If bar too small, place label just above base inside the plot area
+        const labelY = (bh >= 28) ? (y + Math.min(20, bh - 10)) : (base - 8);
+        ctx.fillStyle = "#fff";
+        const maxChars = Math.floor((bw - 10) / 6); // rough fit
+        const txt = String(label).length > maxChars ? String(label).slice(0, Math.max(0, maxChars - 1)) + "…" : String(label);
+        ctx.fillText(txt, x + 6, labelY);
       });
     }
 
@@ -1199,7 +1267,6 @@ pre{
       lastSnapshotKey: "kpi:lastSnapshot",
       viewKey: "kpi:views",
       drill: {},
-      drillRateBucket: {},
       drillLoanProgram: {}
     };
 
@@ -1223,8 +1290,7 @@ pre{
       return "Other";
     }
 
-    // Milestone date fields (REQUESTED)
-    // NOTE: We cannot confirm syntax in your tenant from here. If blank, validate field names and update these constants.
+    // Milestone date fields
     const MS_DATE_LOAN_APP = "Fields.Log.MS.Date.Loan App";
     const MS_DATE_PROCESSING = "Fields.Log.MS.Date.Processing";
     const MS_DATE_APPROVAL = "Fields.Log.MS.Date.Approval";
@@ -1235,10 +1301,15 @@ pre{
       const loanNumber = safe(getField(loan, "Loan.LoanNumber"), "");
       const amt = toNumber(getField(loan, "Loan.LoanAmount"));
       const loanProgram = normStr(getField(loan, "Fields.1401"));
-      const lo = safe(getField(loan, "Fields.317"), "Unassigned");
+
+      // LO (317)
+      const loRaw = normStr(getField(loan, "Fields.317"));
+      const lo = loRaw ? loRaw : "Unassigned";
+
       const purpose = normStr(getField(loan, "Fields.19"));
       const amortType = normStr(getField(loan, "Fields.608"));
       const loanType = normStr(getField(loan, "Fields.1172"));
+      const st = normStr(getField(loan, "Fields.12")); // ✅ State (12)
 
       const milestone = safe(getField(loan, "Fields.Log.MS.CurrentMilestone"), "Unknown");
 
@@ -1247,19 +1318,19 @@ pre{
       const closeDate = parseDate(getField(loan, "Fields.748"));
       const uwDate = parseDate(getField(loan, "Fields.2301"));
 
-      const startedDate = parseDate(
-        getField(loan, "Fields.Log.MS.Date.Started")
-      );
+      const startedDate = parseDate(getField(loan, "Fields.Log.MS.Date.Started"));
 
       const msLoanAppDate = parseDate(getField(loan, MS_DATE_LOAN_APP));
       const msProcessingDate = parseDate(getField(loan, MS_DATE_PROCESSING));
       const msApprovalDate = parseDate(getField(loan, MS_DATE_APPROVAL));
+
       const rateBucket = classifyRateBucket(loanType, purpose);
 
       return {
         loanNumber,
         amt,
         lo,
+        state: st,
         purpose,
         amortType,
         loanType,
@@ -1280,13 +1351,19 @@ pre{
 
     function applyFilters(loans){
       const selLO = new Set(msLo.getSelected());
+      const selState = new Set(msState.getSelected());
       const selAmort = new Set(msAmort.getSelected());
       const selPurpose = new Set(msPurpose.getSelected());
       const selLoanType = new Set(msRateType.getSelected());
       const selMs = new Set(msMilestone.getSelected());
 
       return loans.filter(l => {
+        // ✅ Fix: when no LOs selected (All), EXCLUDE loans with no LO assigned
+        // This prevents Total Pipeline Volume increasing due to "Unassigned" loans being included.
+        if (selLO.size === 0 && (l.lo === "Unassigned" || !l.lo)) return false;
+
         if (selLO.size && !selLO.has(l.lo)) return false;
+        if (selState.size && !selState.has(l.state)) return false;
         if (selAmort.size && !selAmort.has(l.amortType)) return false;
         if (selPurpose.size && !selPurpose.has(l.purpose)) return false;
         if (selLoanType.size && !selLoanType.has(l.loanType)) return false;
@@ -1324,305 +1401,276 @@ pre{
       if (kind) tileEl.classList.add(kind);
     }
 
-function computeKpis(loans){
-  const totalUnits = loans.length;
-  const totalVol = loans.reduce((a,l)=>a+(Number.isFinite(l.amt)?l.amt:0), 0);
-  const avgAmt = totalUnits ? (totalVol/totalUnits) : NaN;
+    function computeKpis(loans){
+      const totalUnits = loans.length;
+      const totalVol = loans.reduce((a,l)=>a+(Number.isFinite(l.amt)?l.amt:0), 0);
+      const avgAmt = totalUnits ? (totalVol/totalUnits) : NaN;
 
-  const loSet = new Set(loans.map(l=>l.lo).filter(v=>v && v !== "Unassigned"));
-  const uniqueLOs = loSet.size;
+      const loSet = new Set(loans.map(l=>l.lo).filter(v=>v && v !== "Unassigned"));
+      const uniqueLOs = loSet.size;
 
-  const { start, end } = monthWindow();
-  const appsMTDLoans = loans.filter(l => l.appDate && l.appDate >= start && l.appDate < end);
-  const appsMTD = appsMTDLoans.length;
+      const { start, end } = monthWindow();
+      const appsMTDLoans = loans.filter(l => l.appDate && l.appDate >= start && l.appDate < end);
+      const appsMTD = appsMTDLoans.length;
 
-  const fundedMTDLoans = loans.filter(l => l.closeDate && l.closeDate >= start && l.closeDate < end);
-  const fundedMTD = fundedMTDLoans.length;
+      const fundedMTDLoans = loans.filter(l => l.closeDate && l.closeDate >= start && l.closeDate < end);
+      const fundedMTD = fundedMTDLoans.length;
 
-  const pullThrough = appsMTD ? (fundedMTD / appsMTD) : NaN;
+      const pullThrough = appsMTD ? (fundedMTD / appsMTD) : NaN;
 
-  const threshold = Math.max(1, Math.min(365, Number($("ageDays").value || 45)));
-  const now = new Date();
-  const agedLoansList = loans.filter(l => l.appDate && (daysBetween(l.appDate, now) > threshold));
-  const agedLoans = agedLoansList.length;
+      const threshold = Math.max(1, Math.min(365, Number($("ageDays").value || 45)));
+      const now = new Date();
+      const agedLoansList = loans.filter(l => l.appDate && (daysBetween(l.appDate, now) > threshold));
+      const agedLoans = agedLoansList.length;
 
-  const appToDiscList  = loans.map(l => daysBetween(l.appDate, l.discDate)).filter(d => Number.isFinite(d) && d >= 0);
-  const appToUWList    = loans.map(l => daysBetween(l.appDate, l.uwDate)).filter(d => Number.isFinite(d) && d >= 0);
-  const appToCloseList = loans.map(l => daysBetween(l.appDate, l.closeDate)).filter(d => Number.isFinite(d) && d >= 0);
+      const appToDiscList  = loans.map(l => daysBetween(l.appDate, l.discDate)).filter(d => Number.isFinite(d) && d >= 0);
+      const appToUWList    = loans.map(l => daysBetween(l.appDate, l.uwDate)).filter(d => Number.isFinite(d) && d >= 0);
+      const appToCloseList = loans.map(l => daysBetween(l.appDate, l.closeDate)).filter(d => Number.isFinite(d) && d >= 0);
 
-  const avg = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : NaN;
+      const avg = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : NaN;
 
-  const avgAppToDisc  = avg(appToDiscList);
-  const avgAppToUW    = avg(appToUWList);
-  const avgAppToClose = avg(appToCloseList);
+      const avgAppToDisc  = avg(appToDiscList);
+      const avgAppToUW    = avg(appToUWList);
+      const avgAppToClose = avg(appToCloseList);
 
-  // purpose distribution excluding unknown/blank
-  const byPurpose = {};
-  for (const l of loans){
-    if (!l.purpose) continue;
-    byPurpose[l.purpose] = (byPurpose[l.purpose] || 0) + 1;
-  }
-  const purposeEntries = sortEntries(byPurpose);
-  const topPurpose = purposeEntries[0]?.[0] ?? "—";
-  const topPurposeShare = totalUnits ? (purposeEntries[0]?.[1] || 0) / totalUnits : NaN;
+      // purpose distribution excluding unknown/blank
+      const byPurpose = {};
+      for (const l of loans){
+        if (!l.purpose) continue;
+        byPurpose[l.purpose] = (byPurpose[l.purpose] || 0) + 1;
+      }
+      const purposeEntries = sortEntries(byPurpose);
+      const topPurpose = purposeEntries[0]?.[0] ?? "—";
+      const topPurposeShare = totalUnits ? (purposeEntries[0]?.[1] || 0) / totalUnits : NaN;
 
-  const byMilestone = {};
-  const byLO = {};
-  const volByLO = {};
-  const byRateBucket = {};
-  const drillRateBucket = {};
+      const byMilestone = {};
+      const byLO = {};
+      const volByLO = {};
 
-  // ✅ NEW: Loan Program Mix (1401)
-  const byLoanProgram = {};
-  const drillLoanProgram = {};
+      // Loan Program Mix (1401)
+      const byLoanProgram = {};
+      const drillLoanProgram = {};
 
-  for (const l of loans){
-    byMilestone[l.milestone] = (byMilestone[l.milestone] || 0) + 1;
+      for (const l of loans){
+        byMilestone[l.milestone] = (byMilestone[l.milestone] || 0) + 1;
 
-    byLO[l.lo] = (byLO[l.lo] || 0) + 1;
-    volByLO[l.lo] = (volByLO[l.lo] || 0) + (Number.isFinite(l.amt) ? l.amt : 0);
+        byLO[l.lo] = (byLO[l.lo] || 0) + 1;
+        volByLO[l.lo] = (volByLO[l.lo] || 0) + (Number.isFinite(l.amt) ? l.amt : 0);
 
-    if (l.rateBucket){
-      byRateBucket[l.rateBucket] = (byRateBucket[l.rateBucket] || 0) + 1;
-      (drillRateBucket[l.rateBucket] ||= []).push(l);
+        if (l.loanProgram){
+          byLoanProgram[l.loanProgram] = (byLoanProgram[l.loanProgram] || 0) + 1;
+          (drillLoanProgram[l.loanProgram] ||= []).push(l);
+        }
+      }
+
+      const milestoneEntries = sortEntries(byMilestone);
+      const loEntries = sortEntries(byLO);
+      const loanProgramEntries = sortEntries(byLoanProgram);
+
+      state.drillLoanProgram = drillLoanProgram;
+
+      // Turn time calculations
+      const submitToAppComplete = loans
+        .map(l => daysBetween(l.appDate, l.msLoanAppDate))
+        .filter(d => Number.isFinite(d) && d >= 0);
+
+      const appToProcessing = loans
+        .map(l => daysBetween(l.msLoanAppDate, l.msProcessingDate))
+        .filter(d => Number.isFinite(d) && d >= 0);
+
+      const avgSubmitToAppComplete = avg(submitToAppComplete);
+      const avgAppToProcessing = avg(appToProcessing);
+
+      state.drill = {
+        pipelineUnits: loans,
+        pipelineVol: loans,
+        avgLoanAmt: loans,
+        uniqueLOs: loans,
+        appsMTD: appsMTDLoans,
+        fundedMTD: fundedMTDLoans,
+        pullThrough: appsMTDLoans,
+        agedLoans: agedLoansList,
+        t_appToDisc: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.discDate)) && daysBetween(l.appDate, l.discDate) >= 0),
+        t_appToUW: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.uwDate)) && daysBetween(l.appDate, l.uwDate) >= 0),
+        t_appToClose: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.closeDate)) && daysBetween(l.appDate, l.closeDate) >= 0),
+        mixPurposeTop: loans.filter(l => l.purpose && l.purpose === topPurpose)
+      };
+
+      return {
+        totalUnits, totalVol, avgAmt, uniqueLOs,
+        appsMTD, fundedMTD, pullThrough,
+        agedLoans, threshold,
+        avgAppToDisc, avgAppToUW, avgAppToClose,
+        topPurpose, topPurposeShare,
+        milestoneEntries,
+        loEntries, volByLO,
+        purposeEntries,
+        loanProgramEntries,
+        avgSubmitToAppComplete,
+        avgAppToProcessing,
+        submitToAppCount: submitToAppComplete.length,
+        appToProcCount: appToProcessing.length
+      };
     }
 
-    // ✅ NEW: group by loan program (Fields.1401)
-    if (l.loanProgram){
-      byLoanProgram[l.loanProgram] = (byLoanProgram[l.loanProgram] || 0) + 1;
-      (drillLoanProgram[l.loanProgram] ||= []).push(l);
+    function renderKpis(k, prior){
+      $("k_pipelineUnits").textContent = String(k.totalUnits);
+      $("k_pipelineVol").textContent   = money(k.totalVol);
+      $("k_avgLoanAmt").textContent    = Number.isFinite(k.avgAmt) ? money(k.avgAmt) : "—";
+      $("k_uniqueLOs").textContent     = String(k.uniqueLOs);
+
+      $("k_appsMTD").textContent       = String(k.appsMTD);
+      $("k_fundedMTD").textContent     = String(k.fundedMTD);
+      $("k_pullThrough").textContent   = Number.isFinite(k.pullThrough) ? pct(k.pullThrough) : "—";
+      $("k_agedLoans").textContent     = String(k.agedLoans);
+
+      $("k_appToDisc").textContent     = Number.isFinite(k.avgAppToDisc) ? k.avgAppToDisc.toFixed(1) : "—";
+      $("k_appToUW").textContent       = Number.isFinite(k.avgAppToUW) ? k.avgAppToUW.toFixed(1) : "—";
+      $("k_appToClose").textContent    = Number.isFinite(k.avgAppToClose) ? k.avgAppToClose.toFixed(1) : "—";
+      $("k_mixPurposeTop").textContent = k.topPurpose === "—" ? "—" : `${k.topPurpose} • ${pct(k.topPurposeShare)}`;
+
+      if (prior){
+        setTrend("t_pipelineUnits", k.totalUnits, prior.totalUnits);
+        setTrend("t_pipelineVol",   k.totalVol,   prior.totalVol);
+        setTrend("t_avgLoanAmt",    k.avgAmt,     prior.avgAmt);
+        setTrend("t_uniqueLOs",     k.uniqueLOs,  prior.uniqueLOs);
+
+        setTrend("t_appsMTD",       k.appsMTD,     prior.appsMTD);
+        setTrend("t_fundedMTD",     k.fundedMTD,   prior.fundedMTD);
+        setTrend("t_pullThrough",   k.pullThrough, prior.pullThrough);
+        setTrend("t_agedLoans",     k.agedLoans,   prior.agedLoans);
+
+        setTrend("t_appToDisc",     k.avgAppToDisc, prior.avgAppToDisc);
+        setTrend("t_appToUW",       k.avgAppToUW,   prior.avgAppToUW);
+        setTrend("t_appToClose",    k.avgAppToClose, prior.avgAppToClose);
+      }
+
+      const tiles = Array.from(document.querySelectorAll(".kpi-tile"));
+      for (const t of tiles) t.classList.remove("health-ok","health-warn","health-bad");
+
+      setHealth(document.querySelector('[data-kpi="t_appToDisc"]'),
+        Number.isFinite(k.avgAppToDisc) ? (k.avgAppToDisc > 5 ? "health-bad" : (k.avgAppToDisc > 3 ? "health-warn" : "health-ok")) : null
+      );
+
+      const agedRatio = k.totalUnits ? (k.agedLoans / k.totalUnits) : NaN;
+      setHealth(document.querySelector('[data-kpi="agedLoans"]'),
+        Number.isFinite(agedRatio) ? (agedRatio > 0.20 ? "health-bad" : (agedRatio > 0.10 ? "health-warn" : "health-ok")) : null
+      );
     }
-  }
 
-  const milestoneEntries = sortEntries(byMilestone);
-  const loEntries = sortEntries(byLO);
-  const rateBucketEntries = sortEntries(byRateBucket);
+    function renderList(elId, entries, { topN=10, volByKey=null, onClickKey=null } = {}){
+      const el = $(elId);
+      if (!el) return;
+      if (!entries.length){ el.textContent = "—"; return; }
 
-  // ✅ NEW
-  const loanProgramEntries = sortEntries(byLoanProgram);
-
-  state.drillRateBucket = drillRateBucket;
-  state.drillLoanProgram = drillLoanProgram; // assumes state has drillLoanProgram: {}
-
-  // Turn time calculations
-  const submitToAppComplete = loans
-    .map(l => daysBetween(l.appDate, l.msLoanAppDate))
-    .filter(d => Number.isFinite(d) && d >= 0);
-
-  // ✅ This is the exact subtraction you asked for:
-  // msProcessingDate - msLoanAppDate
-  const appToProcessing = loans
-    .map(l => daysBetween(l.msLoanAppDate, l.msProcessingDate))
-    .filter(d => Number.isFinite(d) && d >= 0);
-
-  const avgSubmitToAppComplete = avg(submitToAppComplete);
-  const avgAppToProcessing = avg(appToProcessing);
-
-  state.drill = {
-    pipelineUnits: loans,
-    pipelineVol: loans,
-    avgLoanAmt: loans,
-    uniqueLOs: loans,
-    appsMTD: appsMTDLoans,
-    fundedMTD: fundedMTDLoans,
-    pullThrough: appsMTDLoans,
-    agedLoans: agedLoansList,
-    t_appToDisc: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.discDate)) && daysBetween(l.appDate, l.discDate) >= 0),
-    t_appToUW: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.uwDate)) && daysBetween(l.appDate, l.uwDate) >= 0),
-    t_appToClose: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.closeDate)) && daysBetween(l.appDate, l.closeDate) >= 0),
-    mixPurposeTop: loans.filter(l => l.purpose && l.purpose === topPurpose)
-  };
-
-  return {
-    totalUnits, totalVol, avgAmt, uniqueLOs,
-    appsMTD, fundedMTD, pullThrough,
-    agedLoans, threshold,
-    avgAppToDisc, avgAppToUW, avgAppToClose,
-    topPurpose, topPurposeShare,
-    milestoneEntries, loEntries, volByLO,
-    purposeEntries,
-    rateBucketEntries,
-
-    // ✅ NEW: Loan Program Mix
-    loanProgramEntries,
-
-    // turn times
-    avgSubmitToAppComplete,
-    avgAppToProcessing,
-    submitToAppCount: submitToAppComplete.length,
-    appToProcCount: appToProcessing.length
-  };
-}
-
-function renderKpis(k, prior){
-  $("k_pipelineUnits").textContent = String(k.totalUnits);
-  $("k_pipelineVol").textContent   = money(k.totalVol);
-  $("k_avgLoanAmt").textContent    = Number.isFinite(k.avgAmt) ? money(k.avgAmt) : "—";
-  $("k_uniqueLOs").textContent     = String(k.uniqueLOs);
-
-  $("k_appsMTD").textContent       = String(k.appsMTD);
-  $("k_fundedMTD").textContent     = String(k.fundedMTD);
-  $("k_pullThrough").textContent   = Number.isFinite(k.pullThrough) ? pct(k.pullThrough) : "—";
-  $("k_agedLoans").textContent     = String(k.agedLoans);
-
-  $("k_appToDisc").textContent     = Number.isFinite(k.avgAppToDisc) ? k.avgAppToDisc.toFixed(1) : "—";
-  $("k_appToUW").textContent       = Number.isFinite(k.avgAppToUW) ? k.avgAppToUW.toFixed(1) : "—";
-  $("k_appToClose").textContent    = Number.isFinite(k.avgAppToClose) ? k.avgAppToClose.toFixed(1) : "—";
-  $("k_mixPurposeTop").textContent = k.topPurpose === "—" ? "—" : `${k.topPurpose} • ${pct(k.topPurposeShare)}`;
-
-  if (prior){
-    setTrend("t_pipelineUnits", k.totalUnits, prior.totalUnits);
-    setTrend("t_pipelineVol",   k.totalVol,   prior.totalVol);
-    setTrend("t_avgLoanAmt",    k.avgAmt,     prior.avgAmt);
-    setTrend("t_uniqueLOs",     k.uniqueLOs,  prior.uniqueLOs);
-
-    setTrend("t_appsMTD",       k.appsMTD,     prior.appsMTD);
-    setTrend("t_fundedMTD",     k.fundedMTD,   prior.fundedMTD);
-    setTrend("t_pullThrough",   k.pullThrough, prior.pullThrough);
-    setTrend("t_agedLoans",     k.agedLoans,   prior.agedLoans);
-
-    setTrend("t_appToDisc",     k.avgAppToDisc, prior.avgAppToDisc);
-    setTrend("t_appToUW",       k.avgAppToUW,   prior.avgAppToUW);
-    setTrend("t_appToClose",    k.avgAppToClose, prior.avgAppToClose);
-  }
-
-  const tiles = Array.from(document.querySelectorAll(".kpi-tile"));
-  for (const t of tiles) t.classList.remove("health-ok","health-warn","health-bad");
-
-  setHealth(document.querySelector('[data-kpi="t_appToDisc"]'),
-    Number.isFinite(k.avgAppToDisc) ? (k.avgAppToDisc > 5 ? "health-bad" : (k.avgAppToDisc > 3 ? "health-warn" : "health-ok")) : null
-  );
-
-  const agedRatio = k.totalUnits ? (k.agedLoans / k.totalUnits) : NaN;
-  setHealth(document.querySelector('[data-kpi="agedLoans"]'),
-    Number.isFinite(agedRatio) ? (agedRatio > 0.20 ? "health-bad" : (agedRatio > 0.10 ? "health-warn" : "health-ok")) : null
-  );
-}
-
-function renderList(elId, entries, { topN=10, volByKey=null, onClickKey=null } = {}){
-  const el = $(elId);
-  if (!el) return;
-  if (!entries.length){ el.textContent = "—"; return; }
-
-  el.innerHTML = entries.slice(0, topN).map(([k,v]) => {
-    const vol = volByKey ? volByKey[k] : null;
-    return `
-      <div class="list-item ${onClickKey ? "clickable" : ""}" data-key="${escapeHtml(k)}">
-        <div>
-          <b>${escapeHtml(k)}</b>
-          <div class="badge">${v} loans${volByKey ? ` • ${escapeHtml(moneyShort(vol || 0))}` : ""}</div>
-        </div>
-        <div class="right"><b>${v}</b></div>
-      </div>
-    `;
-  }).join("");
-
-  if (onClickKey){
-    el.querySelectorAll(".list-item").forEach(item => {
-      item.addEventListener("click", () => {
-        const key = item.getAttribute("data-key") || "";
-        if (!key) return;
-        onClickKey(key);
-      });
-    });
-  }
-}
-
-function renderBreakdowns(k){
-  barChart("c_milestone", k.milestoneEntries, { maxBars: 12 });
-
-  const loChartEntries = k.loEntries.slice(0, 8).map(([name,count]) => {
-    const vol = k.volByLO[name] || 0;
-    return [`${name} • ${moneyShort(vol)}`, count];
-  });
-  barChart("c_lo", loChartEntries, { maxBars: 8 });
-
-  barChart("c_purpose", k.purposeEntries, { maxBars: 14 });
-
-  // Turn times chart
-  const turnEntries = [
-    ["Loan Submit → Loan App Complete", k.avgSubmitToAppComplete],
-    ["Loan App → Processing", k.avgAppToProcessing]
-  ].filter(e => Number.isFinite(e[1]));
-
-  barChart("c_turnTimes", turnEntries, {
-    maxBars: 10,
-    valueFormat: (v) => v.toFixed(1) + "d"
-  });
-
-  if (!turnEntries.length){
-    log("Turn Times: no usable data found for milestone date fields. Verify field syntax:");
-    log("  ", MS_DATE_LOAN_APP);
-    log("  ", MS_DATE_PROCESSING);
-  } else {
-    log("Turn Times sample counts:", { submitToAppCount: k.submitToAppCount, appToProcCount: k.appToProcCount });
-  }
-
-  renderList("rateTypeList", k.rateBucketEntries, {
-    topN: 12,
-    onClickKey: (bucket) => {
-      const loans = state.drillRateBucket[bucket] || [];
-      openModal({ title: `Rate Type Mix: ${bucket}`, subtitle: `${loans.length} loans`, loans });
-    }
-  });
-
-  // ✅ NEW: Loan Program widget list (must exist in HTML with id="loanProgramList")
-  renderList("loanProgramList", k.loanProgramEntries || [], {
-    topN: 12,
-    onClickKey: (program) => {
-      const loans = state.drillLoanProgram?.[program] || [];
-      openModal({ title: `Loan Program: ${program}`, subtitle: `${loans.length} loans`, loans });
-    }
-  });
-
-  renderList("topLoList", k.loEntries, { topN: 10, volByKey: k.volByLO });
-}
-
-// -----------------------------
-// Drill-through modal (UPDATED to show loan program)
-// -----------------------------
-const modalBackdrop = $("modalBackdrop");
-const modalTitle = $("modalTitle");
-const modalSubtitle = $("modalSubtitle");
-const modalList = $("modalList");
-let currentModalLoans = [];
-
-function openModal({ title, subtitle, loans }){
-  currentModalLoans = loans || [];
-  modalTitle.textContent = title;
-  modalSubtitle.textContent = subtitle;
-
-  if (!currentModalLoans.length){
-    modalList.innerHTML = `<div class="muted">No loans matched.</div>`;
-  } else {
-    modalList.innerHTML = currentModalLoans.slice(0, 250).map(l => {
-      const num = safe(l.loanNumber,"");
-      const amt = Number.isFinite(l.amt) ? moneyShort(l.amt) : "—";
-      const app = l.appDate ? l.appDate.toLocaleDateString() : "—";
-      const ms = safe(l.milestone, "—");
-      const purpose = l.purpose ? l.purpose : "—";
-      const loanType = l.loanType ? l.loanType : "—";
-      const amort = l.amortType ? l.amortType : "—";
-      const program = l.loanProgram ? l.loanProgram : "—";
-
-      return `
-        <div class="list-item">
-          <div>
-            <b class="mono">${escapeHtml(num || "(no loan #)")}</b>
-            <div class="badge">${escapeHtml(l.lo)} • ${escapeHtml(amort)} • ${escapeHtml(purpose)} • ${escapeHtml(loanType)} • ${escapeHtml(program)} • ${escapeHtml(ms)} • App: ${escapeHtml(app)}</div>
+      el.innerHTML = entries.slice(0, topN).map(([k,v]) => {
+        const vol = volByKey ? volByKey[k] : null;
+        return `
+          <div class="list-item ${onClickKey ? "clickable" : ""}" data-key="${escapeHtml(k)}">
+            <div>
+              <b>${escapeHtml(k)}</b>
+              <div class="badge">${v} loans${volByKey ? ` • ${escapeHtml(moneyShort(vol || 0))}` : ""}</div>
+            </div>
+            <div class="right"><b>${v}</b></div>
           </div>
-          <div class="right"><b>${escapeHtml(amt)}</b></div>
-        </div>
-      `;
-    }).join("");
+        `;
+      }).join("");
 
-    if (currentModalLoans.length > 250){
-      modalList.innerHTML += `<div class="muted">Showing first 250 of ${currentModalLoans.length} loans.</div>`;
+      if (onClickKey){
+        el.querySelectorAll(".list-item").forEach(item => {
+          item.addEventListener("click", () => {
+            const key = item.getAttribute("data-key") || "";
+            if (!key) return;
+            onClickKey(key);
+          });
+        });
+      }
     }
-  }
 
-  modalBackdrop.classList.add("open");
-}
+    function renderBreakdowns(k){
+      barChart("c_milestone", k.milestoneEntries, { maxBars: 12 });
+
+      // Removed Loans by Loan Officer chart per request
+
+      barChart("c_purpose", k.purposeEntries, { maxBars: 14 });
+
+      // Turn times chart with overlay labels on bars
+      const turnEntries = [
+        ["Loan Submit → Loan App Complete", k.avgSubmitToAppComplete],
+        ["Loan App → Processing", k.avgAppToProcessing]
+      ].filter(e => Number.isFinite(e[1]));
+
+      barChartOverlayLabels("c_turnTimes", turnEntries, {
+        maxBars: 10,
+        valueFormat: (v) => v.toFixed(1) + "d"
+      });
+
+      if (!turnEntries.length){
+        log("Turn Times: no usable data found for milestone date fields. Verify field syntax:");
+        log("  ", MS_DATE_LOAN_APP);
+        log("  ", MS_DATE_PROCESSING);
+      } else {
+        log("Turn Times sample counts:", { submitToAppCount: k.submitToAppCount, appToProcCount: k.appToProcCount });
+      }
+
+      // Product Mix now shows ONLY Loan Program list
+      renderList("loanProgramList", k.loanProgramEntries || [], {
+        topN: 12,
+        onClickKey: (program) => {
+          const loans = state.drillLoanProgram?.[program] || [];
+          openModal({ title: `Loan Program: ${program}`, subtitle: `${loans.length} loans`, loans });
+        }
+      });
+
+      renderList("topLoList", k.loEntries, { topN: 10, volByKey: k.volByLO });
+    }
+
+    // -----------------------------
+    // Drill-through modal
+    // -----------------------------
+    const modalBackdrop = $("modalBackdrop");
+    const modalTitle = $("modalTitle");
+    const modalSubtitle = $("modalSubtitle");
+    const modalList = $("modalList");
+    let currentModalLoans = [];
+
+    function openModal({ title, subtitle, loans }){
+      currentModalLoans = loans || [];
+      modalTitle.textContent = title;
+      modalSubtitle.textContent = subtitle;
+
+      if (!currentModalLoans.length){
+        modalList.innerHTML = `<div class="muted">No loans matched.</div>`;
+      } else {
+        modalList.innerHTML = currentModalLoans.slice(0, 250).map(l => {
+          const num = safe(l.loanNumber,"");
+          const amt = Number.isFinite(l.amt) ? moneyShort(l.amt) : "—";
+          const app = l.appDate ? l.appDate.toLocaleDateString() : "—";
+          const ms = safe(l.milestone, "—");
+          const purpose = l.purpose ? l.purpose : "—";
+          const loanType = l.loanType ? l.loanType : "—";
+          const amort = l.amortType ? l.amortType : "—";
+          const program = l.loanProgram ? l.loanProgram : "—";
+          const st = l.state ? l.state : "—";
+
+          return `
+            <div class="list-item">
+              <div>
+                <b class="mono">${escapeHtml(num || "(no loan #)")}</b>
+                <div class="badge">${escapeHtml(l.lo)} • ${escapeHtml(st)} • ${escapeHtml(amort)} • ${escapeHtml(purpose)} • ${escapeHtml(loanType)} • ${escapeHtml(program)} • ${escapeHtml(ms)} • App: ${escapeHtml(app)}</div>
+              </div>
+              <div class="right"><b>${escapeHtml(amt)}</b></div>
+            </div>
+          `;
+        }).join("");
+
+        if (currentModalLoans.length > 250){
+          modalList.innerHTML += `<div class="muted">Showing first 250 of ${currentModalLoans.length} loans.</div>`;
+        }
+      }
+
+      modalBackdrop.classList.add("open");
+    }
 
     $("btnCloseModal").addEventListener("click", ()=> modalBackdrop.classList.remove("open"));
     modalBackdrop.addEventListener("click", (e)=> { if (e.target === modalBackdrop) modalBackdrop.classList.remove("open"); });
@@ -1664,6 +1712,7 @@ function openModal({ title, subtitle, loans }){
         ageDays: $("ageDays").value,
         filters: {
           lo: msLo.getSelected(),
+          state: msState.getSelected(),
           amort: msAmort.getSelected(),
           purpose: msPurpose.getSelected(),
           rateType: msRateType.getSelected(),
@@ -1681,6 +1730,7 @@ function openModal({ title, subtitle, loans }){
       $("ageDays").value = v.ageDays ?? $("ageDays").value;
 
       msLo.setSelected(v.filters?.lo || []);
+      msState.setSelected(v.filters?.state || []);
       msAmort.setSelected(v.filters?.amort || []);
       msPurpose.setSelected(v.filters?.purpose || []);
       msRateType.setSelected(v.filters?.rateType || []);
@@ -1716,6 +1766,7 @@ function openModal({ title, subtitle, loans }){
 
     // -----------------------------
     // Refresh flow
+    // -----------------------------
     async function refresh(){
       const folders = msFolders.getSelected();
       if (!folders.length) return;
@@ -1728,14 +1779,11 @@ function openModal({ title, subtitle, loans }){
         const token = await getAccessToken();
         const limit = Math.max(1, Math.min(1000, Number($("limit").value || 1000)));
 
-        // Fields needed for:
-        // - existing KPIs
-        // - Amortization filter (608)
-        // - milestone turn times chart (MS_DATE_LOAN_APP / MS_DATE_PROCESSING / MS_DATE_APPROVAL)
         const fields = [
           "Loan.LoanNumber",
           "Loan.LoanAmount",
           "Fields.317",
+          "Fields.12",              // ✅ State
           "Fields.608",
           "Fields.19",
           "Fields.Log.MS.CurrentMilestone",
@@ -1747,26 +1795,16 @@ function openModal({ title, subtitle, loans }){
           "Fields.1172",
           "Fields.1401",
 
-          // milestone canonical fields
           MS_DATE_LOAN_APP,
           MS_DATE_PROCESSING,
           MS_DATE_APPROVAL
-        ].filter(f => !canonicalFieldSet.size || canonicalFieldSet.has(f)); // if set is loaded, validate
+        ].filter(f => !canonicalFieldSet.size || canonicalFieldSet.has(f));
 
         const raw = await fetchPipelineLoans({ token, folderNames: folders, limit, fields });
 
-        // 🔍 DEBUG: inspect pipeline-returned field keys + values
         if (raw?.length && raw[0]?.fields) {
           log("---- RAW PIPELINE FIELD KEYS (sample loan) ----");
           log(Object.keys(raw[0].fields).slice(0, 80));
-
-          log("---- RAW MILESTONE FIELD VALUES (sample loan) ----");
-          log({
-            started: raw[0].fields["Fields.Log.MS.Date.Started"],
-            loanApp: raw[0].fields["Fields.Log.MS.Date.Loan App"],
-            processing: raw[0].fields["Fields.Log.MS.Date.Processing"],
-            approval: raw[0].fields["Fields.Log.MS.Date.Approval"]
-          });
         }
 
         const normalized = raw.map(normalizeLoan);
@@ -1774,36 +1812,14 @@ function openModal({ title, subtitle, loans }){
         const uniq = (arr) => Array.from(new Set(arr.filter(Boolean)))
           .sort((a,b)=>String(a).localeCompare(String(b)));
 
-        // IMPORTANT:
-        // - Loan Officers are NOT populated from pipeline anymore.
-        // - msLo options come from /company/users (loadLoanOfficers)
-        // - So here we only populate other filters from current data.
+        // Populate filter options from current data (except LO list, which comes from /company/users)
+        msState.setOptions(uniq(normalized.map(l => l.state)));
         msAmort.setOptions(uniq(normalized.map(l => l.amortType)));
         msPurpose.setOptions(uniq(normalized.map(l => l.purpose)));
         msRateType.setOptions(uniq(normalized.map(l => l.loanType)));
         msMilestone.setOptions(uniq(normalized.map(l => l.milestone)));
 
         const filtered = applyFilters(normalized);
-
-        log("---- Milestone Date Debug (KPI Loans Only) ----");
-        filtered.forEach(l => {
-          log({
-            loanNumber: l.loanNumber,
-            loanOfficer: l.lo,
-
-            // Field 745
-            appDate_745: l.appDate ? l.appDate.toLocaleDateString() : null,
-
-            // Milestone: Started
-            milestoneStarted: l.startedDate ? l.startedDate.toLocaleDateString() : null,
-
-            // Milestone: Loan App
-            milestoneLoanApp: l.msLoanAppDate ? l.msLoanAppDate.toLocaleDateString() : null,
-
-            // Milestone: Processing
-            milestoneProcessing: l.msProcessingDate ? l.msProcessingDate.toLocaleDateString() : null
-          });
-        });
 
         state.loansRaw = normalized;
         state.loansFiltered = filtered;
@@ -1837,12 +1853,10 @@ function openModal({ title, subtitle, loans }){
         log("Refresh error:", e?.message || String(e));
         throw e;
       } finally {
-        // Always restore state (and keep it disabled if no folders selected)
         btnRefresh.disabled = (msFolders.getSelected().length === 0);
       }
     }
 
-    // Keep your click handler, but you can simplify it now that refresh() always restores the button state.
     btnRefresh.addEventListener("click", () => {
       refresh().catch(e => log("Refresh error:", e?.message || String(e)));
     });
@@ -1856,8 +1870,6 @@ function openModal({ title, subtitle, loans }){
       try{
         await loadFolders();
         await loadLoanOfficers();
-
-        // NEW: load canonicalFields so we can validate field strings
         await loadPipelineCanonicalFields();
 
         if (msFolders.getSelected().length){
