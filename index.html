@@ -851,33 +851,33 @@
     $("msFieldProcessing").textContent = MS_DATE_PROCESSING;
 
     function normalizeLoan(loan){
-      const loanNumber = safe(getField(loan, "Loan.LoanNumber") ?? loan?.LoanNumber ?? loan?.loanNumber, "");
-      const amt = toNumber(getField(loan, "Loan.LoanAmount") ?? loan?.LoanAmount ?? loan?.loanAmount);
-      const startedDate = parseDate(getField(loan, "Fields.Log.MS.Date.Started"));
-      const lo = safe(getField(loan, "Fields.317") ?? getField(loan, "Loan.LoanOfficer") ?? getField(loan, "Loan.LoanOfficerName"), "Unassigned");
+      const loanNumber = safe(getField(loan, "Loan.LoanNumber"), "");
+      const amt = toNumber(getField(loan, "Loan.LoanAmount"));
 
-      const purposeRaw = normStr(getField(loan, "Fields.19") ?? getField(loan, "Loan.LoanPurpose"));
-      const milestone = safe(getField(loan, "Fields.Log.MS.CurrentMilestone") ?? getField(loan, "Loan.MilestoneName") ?? loan?.MilestoneName, "Unknown");
+      const lo = safe(getField(loan, "Fields.317"), "Unassigned");
+      const purpose = normStr(getField(loan, "Fields.19"));
+      const amortType = normStr(getField(loan, "Fields.608"));
+      const loanType = normStr(getField(loan, "Fields.1172"));
+
+      const milestone = safe(getField(loan, "Fields.Log.MS.CurrentMilestone"), "Unknown");
 
       const appDate = parseDate(getField(loan, "Fields.745"));
       const discDate = parseDate(getField(loan, "Fields.3142"));
       const closeDate = parseDate(getField(loan, "Fields.748"));
       const uwDate = parseDate(getField(loan, "Fields.2301"));
 
-      const amortType = normStr(getField(loan, "Fields.608"));
-
-      const loanTypeRaw = normStr(getField(loan, "Fields.1172"));
-
+      const startedDate = parseDate(getField(loan, "Fields.Log.MS.Date.Started"));
       const msLoanAppDate = parseDate(getField(loan, MS_DATE_LOAN_APP));
       const msProcessingDate = parseDate(getField(loan, MS_DATE_PROCESSING));
 
-      const rateBucket = classifyRateBucket(loanTypeRaw, purposeRaw);
+      const rateBucket = classifyRateBucket(loanType, purpose);
 
       return {
         loanNumber,
         amt,
         lo,
         purpose,
+        amortType,
         loanType,
         rateBucket,
         milestone,
@@ -885,7 +885,9 @@
         discDate,
         closeDate,
         uwDate,
-        startedDate, // ✅ store it
+        startedDate,
+        msLoanAppDate,
+        msProcessingDate,
         _raw: loan
       };
     }
