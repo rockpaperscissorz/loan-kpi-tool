@@ -268,21 +268,18 @@ async function refreshPipelineKpis() {
     const url = "https://api.elliemae.com/encompass/v1/loanPipeline?limit=25";
 
     const body = {
-      filter: {
+    filter: {
         operator: "and",
         terms: [
-          {
-            canonicalName: "Loan.LoanNumber",
-            value: "",
-            matchType: "StartsWith",
+        {
+            canonicalName: "Loan.LoanFolder",
+            value: "Pipeline",
+            matchType: "Equals",
             include: true
-          }
+        }
         ]
-      },
-      fields: [
-        "Loan.LoanAmount",
-        "Loan.MilestoneName"
-      ]
+    },
+    fields: ["Loan.LoanAmount", "Loan.MilestoneName"]
     };
 
     const resp = await fetch(url, {
