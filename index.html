@@ -417,7 +417,7 @@ pre{
 }
 .section { display:flex; flex-direction:column; gap:8px; }
 .section-head { display:flex; flex-direction:column; gap:2px; }
-.section-title { font-size:13px; font-weight:800; letter-spacing:.2px; }
+.section-title { font-size:16px; font-weight:900; letter-spacing:.3px; }
 .section-sub { font-size:12px; color:var(--muted); }
   </style>
 </head>
@@ -592,27 +592,7 @@ pre{
       <div class="kpi-sub">Grouped by <code>Fields.317</code> (label includes volume)</div>
     </div>
     <div class="card span-6">
-      <div class="kpi-label">Product Mix</div>
-
-      <div class="section">
-        <div class="section-head">
-          <div class="section-title">Loan Type</div>
-          <div class="section-sub">Click a bucket to drill-through.</div>
-        </div>
-        <div class="list" id="rateTypeList">—</div>
-      </div>
-
-      <div class="divider" style="margin:12px 0;"></div>
-
-      <div class="section">
-        <div class="section-head">
-          <div class="section-title">Loan Program Mix</div>
-          <div class="section-sub">Click a program to drill-through.</div>
-        </div>
-        <div class="list" id="loanProgramList">—</div>
-      </div>
-    </div>
-    <div class="card span-12">
+          <div class="card span-12">
       <div class="kpi-label">Milestone Turn Times (Average Days)</div>
       <canvas id="c_turnTimes" height="160"></canvas>
       <div class="kpi-sub">
@@ -628,7 +608,29 @@ pre{
       <canvas id="c_purpose" height="160"></canvas>
       <div class="kpi-sub">Grouped by <code>Fields.19</code> (Unknown excluded)</div>
     </div>
+      <div class="kpi-label">Product Mix</div>
 
+<div class="card span-6">
+  <div class="kpi-label">Products</div>
+
+  <div class="section">
+    <div class="section-head centered">
+      <div class="section-title">Loan Type</div>
+      <div class="section-sub">Buckets • Click to drill-through</div>
+    </div>
+    <div class="list" id="rateTypeList">—</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section">
+    <div class="section-head centered">
+      <div class="section-title">Loan Program</div>
+      <div class="section-sub">Buckets • Click to drill-through</div>
+    </div>
+    <div class="list" id="loanProgramList">—</div>
+  </div>
+</div>
 
     <div class="card span-6">
       <div class="kpi-label">Top Loan Officers</div>
