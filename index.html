@@ -540,7 +540,7 @@ pre{
 
       <div class="field small">
         <label class="muted">Limit</label>
-        <input id="limit" class="input" type="number" min="1" max="1000" value="1000" />
+        <input id="limit" class="input" type="number" min="1" max="1000" value="500" />
       </div>
 
       <div class="field small">
@@ -559,7 +559,7 @@ pre{
       </div>
 
       <div class="field">
-        <label class="muted">State (12)</label>
+        <label class="muted">State (14)</label>
         <div class="ms" data-ms="state"></div>
       </div>
 
@@ -569,7 +569,7 @@ pre{
       </div>
 
       <div class="field">
-        <label class="muted">Loan Purpose</label>
+        <label class="muted">Loan Purpose (19)</label>
         <div class="ms" data-ms="purpose"></div>
       </div>
 
@@ -1387,7 +1387,7 @@ pre{
       const purpose = normStr(getField(loan, "Fields.19"));
       const amortType = normStr(getField(loan, "Fields.608"));
       const loanType = normStr(getField(loan, "Fields.1172"));
-      const st = normStr(getField(loan, "Fields.12")); // ✅ State (12)
+      const st = normStr(getField(loan, "Fields.14")); // ✅ State (12)
 
       const milestone = safe(getField(loan, "Fields.Log.MS.CurrentMilestone"), "Unknown");
 
@@ -1948,7 +1948,7 @@ function renderTurnTimesTable(k){
           "Loan.LoanNumber",
           "Loan.LoanAmount",
           "Fields.317",
-          "Fields.12",              // ✅ State
+          "Fields.14",              // ✅ State
           "Fields.608",
           "Fields.19",
           "Fields.Log.MS.CurrentMilestone",
