@@ -8,381 +8,617 @@
   <script src="https://cdn.elliemae.io/elliemae/core/ssf/1.0/elli.ssf.guest-with-polyfill.js"></script>
 
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; background:#fafafa; }
-    h2 { margin: 0 0 6px; }
-    .muted { opacity: 0.75; font-size: 12px; }
-    .bar { display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top: 12px; }
-    .btn  { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
-    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .pill { padding: 6px 10px; border-radius: 999px; border: 1px solid #e6e6e6; font-size: 12px; background: #fff; }
-    .grid { display:grid; gap:12px; grid-template-columns: repeat(12, 1fr); margin-top: 12px; }
-    .card { border: 1px solid #e6e6e6; border-radius: 16px; padding: 14px; background:#fff; box-shadow: 0 1px 0 rgba(0,0,0,0.03); }
-    .kpi-label { font-size: 12px; opacity: 0.75; margin-bottom: 6px; }
-    .kpi-value { font-size: 26px; font-weight: 800; line-height: 1.15; word-break: break-word; }
-    .kpi-sub { margin-top: 6px; font-size: 12px; opacity: 0.75; }
-    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    pre { background:#f7f7f7; padding: 10px; border-radius: 10px; overflow:auto; }
-    code { background:#f7f7f7; padding:2px 6px; border-radius:6px; }
-    .field { display:flex; flex-direction:column; gap:4px; }
-    .input, select {
-      padding: 10px 12px; border-radius: 12px; border: 1px solid #d8d8d8; background:#fff;
-      font-size: 14px;
-      min-width: 260px;
+    :root{
+      --bg:#fafafa; --card:#fff; --b:#e9e9e9; --text:#111; --muted:#6b6b6b;
+      --ok:#e9f7ef; --warn:#fff6e5; --bad:#ffecec;
     }
+    body{ font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:16px; background:var(--bg); color:var(--text); }
+    h1{ font-size:18px; margin:0 0 6px; }
+    .muted{ color:var(--muted); font-size:12px; }
+    code{ background:#f3f3f3; padding:2px 6px; border-radius:6px; }
+    .card{ background:var(--card); border:1px solid var(--b); border-radius:16px; padding:14px; box-shadow: 0 1px 0 rgba(0,0,0,.03); }
+    .grid{ display:grid; gap:12px; grid-template-columns: repeat(12, 1fr); margin-top:12px; }
+    .span-12{ grid-column: span 12; } .span-6{ grid-column: span 6; } .span-4{ grid-column: span 4; } .span-3{ grid-column: span 3; }
+    @media (max-width: 980px){ .span-6,.span-4,.span-3{ grid-column: span 12; } }
 
-    /* Layout helpers */
-    .span-12 { grid-column: span 12; }
-    .span-6  { grid-column: span 6; }
-    .span-4  { grid-column: span 4; }
-    .span-3  { grid-column: span 3; }
-    @media (max-width: 980px) {
-      .span-6, .span-4, .span-3 { grid-column: span 12; }
-      .input, select { min-width: 220px; }
-    }
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .pill{ border:1px solid var(--b); background:#fff; border-radius:999px; padding:6px 10px; font-size:12px; }
+    .btn{ border:1px solid #d7d7d7; background:#fff; border-radius:12px; padding:10px 12px; cursor:pointer; }
+    .btn:disabled{ opacity:.6; cursor:not-allowed; }
+    .divider{ height:1px; background:#efefef; margin:12px 0; }
 
-    .divider { height:1px; background:#efefef; margin:10px 0; }
-    .kpi-mini { font-size: 14px; font-weight: 700; }
-    .list { display:flex; flex-direction:column; gap:6px; margin-top: 8px; }
-    .list-item { display:flex; justify-content:space-between; gap:10px; border:1px solid #f0f0f0; border-radius: 12px; padding: 8px 10px; }
-    .list-item b { font-weight: 700; }
-    .right { text-align:right; white-space:nowrap; }
-    .badge { font-size: 11px; opacity:0.75; }
-    canvas { width: 100%; display:block; }
+    /* KPI tiles */
+    .kpi-label{ font-size:12px; color:var(--muted); margin-bottom:6px; }
+    .kpi-value{ font-size:26px; font-weight:800; line-height:1.1; }
+    .kpi-sub{ font-size:12px; color:var(--muted); margin-top:6px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .trend{ font-weight:700; }
+    .trend.up{ color:#0b7a2c; }
+    .trend.down{ color:#b00020; }
+    .kpi-tile{ cursor:pointer; user-select:none; }
+    .health-ok{ background: var(--ok); }
+    .health-warn{ background: var(--warn); }
+    .health-bad{ background: var(--bad); }
 
-        /* Scrollable KPI lists when content is tall */
-    .list.scrollable {
-    max-height: 360px;        /* ~10 rows before scroll */
-    overflow-y: auto;
-    padding-right: 6px;      /* space for scrollbar */
+    /* Inputs */
+    .field{ display:flex; flex-direction:column; gap:6px; min-width: 240px; }
+    .input, select{
+      padding:10px 12px; border-radius:12px; border:1px solid #d8d8d8; background:#fff;
+      font-size:14px;
     }
+    .small{ min-width: 140px; }
 
-    /* Optional: nicer scrollbar (WebKit only) */
-    .list.scrollable::-webkit-scrollbar {
-    width: 8px;
+    /* Multi-select */
+    .ms{
+      position:relative; min-width:260px;
     }
-    .list.scrollable::-webkit-scrollbar-thumb {
-    background: #d0d0d0;
-    border-radius: 8px;
+    .ms-btn{
+      width:100%;
+      text-align:left;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid #d8d8d8;
+      background:#fff;
+      cursor:pointer;
+      display:flex; justify-content:space-between; gap:10px; align-items:center;
     }
-    .list.scrollable::-webkit-scrollbar-track {
-    background: transparent;
+    .ms-btn span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .ms-menu{
+      position:absolute; z-index:50; left:0; right:0; top: calc(100% + 6px);
+      background:#fff; border:1px solid #d8d8d8; border-radius:12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.08);
+      padding:10px;
+      display:none;
+      max-height: 320px;
+      overflow:auto;
     }
+    .ms-menu.open{ display:block; }
+    .ms-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+    .ms-actions .btn{ padding:6px 10px; border-radius:10px; }
+    .ms-item{ display:flex; align-items:center; gap:10px; padding:6px 6px; border-radius:10px; }
+    .ms-item:hover{ background:#f7f7f7; }
+    .ms-search{ width:100%; margin-bottom:8px; }
+
+    /* Charts (simple canvas) */
+    canvas{ width:100%; display:block; }
+    .list{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+    .list-item{ display:flex; justify-content:space-between; gap:12px; border:1px solid #f0f0f0; border-radius:12px; padding:8px 10px; }
+    .badge{ font-size:11px; color:var(--muted); }
+    .right{ text-align:right; white-space:nowrap; }
+
+    /* Modal */
+    .backdrop{
+      position:fixed; inset:0; background: rgba(0,0,0,.35);
+      display:none; align-items:center; justify-content:center; padding:18px; z-index:1000;
+    }
+    .backdrop.open{ display:flex; }
+    .modal{
+      width:min(980px, 100%);
+      background:#fff; border-radius:16px; border:1px solid #ddd;
+      box-shadow: 0 20px 60px rgba(0,0,0,.2);
+      padding:14px;
+    }
+    .modal h3{ margin:0; font-size:16px; }
+    .modal-top{ display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
+    .modal-body{ margin-top:10px; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    pre{ background:#f7f7f7; padding:10px; border-radius:10px; overflow:auto; }
   </style>
 </head>
 
 <body>
-  <!-- Header -->
   <div class="card">
-    <h2>Pipeline KPI Dashboard</h2>
+    <h1>Pipeline KPI Dashboard</h1>
     <div class="muted">
-      Folder list from V3 (<code>/encompass/v3/loanFolders</code>). KPIs from V3 (<code>/encompass/v3/loanPipeline</code>).
-      Includes <b>every loan in the selected folder</b> with no other conditions.
+      Folder list via <code>/encompass/v3/loanFolders</code>. Pipeline data via <code>/encompass/v3/loanPipeline</code>.
+      KPIs computed client-side from returned loans (respecting filters).
     </div>
 
-    <div class="bar">
+    <div class="toolbar">
       <div class="row">
-        <span class="pill"><b>SSF:</b> <span id="ssfStatus">Checking…</span></span>
-        <span class="pill"><b>Guest init:</b> <span id="guestStatus">Not started</span></span>
-        <span class="pill"><b>Folder list:</b> <span id="folderStatus">Not loaded</span></span>
-        <span class="pill"><b>Last refresh:</b> <span id="lastRefresh">—</span></span>
+        <span class="pill"><b>SSF</b>: <span id="ssfStatus">Checking…</span></span>
+        <span class="pill"><b>Guest</b>: <span id="guestStatus">Not started</span></span>
+        <span class="pill"><b>Folders</b>: <span id="folderStatus">Not loaded</span></span>
+        <span class="pill"><b>Last refresh</b>: <span id="lastRefresh">—</span></span>
       </div>
 
       <div class="row">
-        <button id="btnPipeline" class="btn" disabled>Refresh</button>
-        <button id="btnClear" class="btn">Clear Debug</button>
+        <button class="btn" id="btnRefresh" disabled>Refresh</button>
+        <button class="btn" id="btnSaveView">Save View</button>
+        <button class="btn" id="btnLoadView">Load View</button>
+        <button class="btn" id="btnClearDebug">Clear Debug</button>
       </div>
     </div>
 
     <div class="divider"></div>
 
+    <!-- Controls -->
     <div class="row">
       <div class="field">
-        <label class="muted" for="folderSelect">Loan folder</label>
+        <label class="muted">Loan folder</label>
         <select id="folderSelect" class="input" disabled>
-          <option value="">Loading folders…</option>
+          <option value="">Loading…</option>
         </select>
       </div>
 
-      <div class="field" style="min-width:160px;">
-        <label class="muted" for="pipeLimit">Limit</label>
-        <input id="pipeLimit" class="input" type="number" min="1" max="1000" value="1000" style="min-width:160px;" />
+      <div class="field small">
+        <label class="muted">Limit</label>
+        <input id="limit" class="input" type="number" min="1" max="1000" value="1000" />
       </div>
 
-      <div class="field" style="min-width:240px;">
-        <label class="muted">Selected folder</label>
-        <div class="pill" style="padding:10px 12px;"><code id="resolvedFolderName">—</code></div>
+      <div class="field small">
+        <label class="muted">Aging threshold (days)</label>
+        <input id="ageDays" class="input" type="number" min="1" max="365" value="45" />
       </div>
+
+      <div class="field">
+        <label class="muted">UW Approval Date Field (org-specific)</label>
+        <input id="uwField" class="input mono" value="Fields.2301" />
+        <div class="muted" style="margin-top:-2px;">Change if your UW approval/decision date is different.</div>
+      </div>
+
+      <div class="field">
+        <label class="muted">Rate Type Field (for mix)</label>
+        <input id="rateTypeField" class="input mono" value="Fields.1172" />
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Multi-select filters -->
+    <div class="row">
+      <div class="field">
+        <label class="muted">Loan Officer (Fields.317)</label>
+        <div class="ms" data-ms="lo"></div>
+      </div>
+
+      <div class="field">
+        <label class="muted">Loan Purpose (Fields.19)</label>
+        <div class="ms" data-ms="purpose"></div>
+      </div>
+
+      <div class="field">
+        <label class="muted">Rate Type (config field)</label>
+        <div class="ms" data-ms="rateType"></div>
+      </div>
+
+      <div class="field">
+        <label class="muted">Milestone (Current)</label>
+        <div class="ms" data-ms="milestone"></div>
+      </div>
+    </div>
+
+    <div class="muted" style="margin-top:10px;">
+      Filters support multi-select. Empty selection = “All”.
     </div>
   </div>
 
-  <!-- Headline KPIs -->
-  <div class="grid">
-    <div class="card span-3">
-      <div class="kpi-label">Loans</div>
-      <div class="kpi-value" id="kpiLoans">—</div>
-      <div class="kpi-sub">Count returned</div>
+  <!-- KPI tiles -->
+  <div class="grid" id="kpiGrid">
+    <!-- Row 1 -->
+    <div class="card span-3 kpi-tile" data-kpi="pipelineUnits">
+      <div class="kpi-label">Total Pipeline Units</div>
+      <div class="kpi-value" id="k_pipelineUnits">—</div>
+      <div class="kpi-sub"><span id="t_pipelineUnits" class="trend"></span><span class="muted">Filtered count</span></div>
     </div>
 
-    <div class="card span-3">
-      <div class="kpi-label">Total Volume</div>
-      <div class="kpi-value" id="kpiTotalVol">—</div>
-      <div class="kpi-sub">Sum of loan amounts</div>
+    <div class="card span-3 kpi-tile" data-kpi="pipelineVol">
+      <div class="kpi-label">Total Pipeline Volume</div>
+      <div class="kpi-value" id="k_pipelineVol">—</div>
+      <div class="kpi-sub"><span id="t_pipelineVol" class="trend"></span><span class="muted">Sum of Loan Amount</span></div>
     </div>
 
-    <div class="card span-3">
-      <div class="kpi-label">Avg Loan Amount</div>
-      <div class="kpi-value" id="kpiAvg">—</div>
-      <div class="kpi-sub">Total ÷ Loans</div>
+    <div class="card span-3 kpi-tile" data-kpi="avgLoanAmt">
+      <div class="kpi-label">Average Loan Amount</div>
+      <div class="kpi-value" id="k_avgLoanAmt">—</div>
+      <div class="kpi-sub"><span id="t_avgLoanAmt" class="trend"></span><span class="muted">Volume ÷ Units</span></div>
     </div>
 
-    <div class="card span-3">
-      <div class="kpi-label">Unique LOs</div>
-      <div class="kpi-value" id="kpiLoCount">—</div>
-      <div class="kpi-sub">Distinct <code>Fields.317</code></div>
+    <div class="card span-3 kpi-tile" data-kpi="uniqueLOs">
+      <div class="kpi-label">Unique Loan Officers</div>
+      <div class="kpi-value" id="k_uniqueLOs">—</div>
+      <div class="kpi-sub"><span id="t_uniqueLOs" class="trend"></span><span class="muted">Distinct Fields.317</span></div>
     </div>
 
-    <!-- Charts -->
+    <!-- Row 2 -->
+    <div class="card span-3 kpi-tile" data-kpi="appsMTD">
+      <div class="kpi-label">Applications Received (MTD)</div>
+      <div class="kpi-value" id="k_appsMTD">—</div>
+      <div class="kpi-sub"><span id="t_appsMTD" class="trend"></span><span class="muted">Fields.745 in month</span></div>
+    </div>
+
+    <div class="card span-3 kpi-tile" data-kpi="fundedMTD">
+      <div class="kpi-label">Funded / Closed (MTD)</div>
+      <div class="kpi-value" id="k_fundedMTD">—</div>
+      <div class="kpi-sub"><span id="t_fundedMTD" class="trend"></span><span class="muted">Fields.748 in month</span></div>
+    </div>
+
+    <div class="card span-3 kpi-tile" data-kpi="pullThrough">
+      <div class="kpi-label">Pull-Through (MTD)</div>
+      <div class="kpi-value" id="k_pullThrough">—</div>
+      <div class="kpi-sub"><span id="t_pullThrough" class="trend"></span><span class="muted">Funded ÷ Apps</span></div>
+    </div>
+
+    <div class="card span-3 kpi-tile" data-kpi="agedLoans">
+      <div class="kpi-label">Loans Aged &gt; Threshold</div>
+      <div class="kpi-value" id="k_agedLoans">—</div>
+      <div class="kpi-sub"><span id="t_agedLoans" class="trend"></span><span class="muted">Based on App Date</span></div>
+    </div>
+
+    <!-- Row 3 (turn times & mix) -->
+    <div class="card span-3 kpi-tile" data-kpi="t_appToDisc">
+      <div class="kpi-label">Avg Days: App → Disclosure</div>
+      <div class="kpi-value" id="k_appToDisc">—</div>
+      <div class="kpi-sub"><span id="t_appToDisc" class="trend"></span><span class="muted">745 → 3142</span></div>
+    </div>
+
+    <div class="card span-3 kpi-tile" data-kpi="t_appToUW">
+      <div class="kpi-label">Avg Days: App → UW Approval</div>
+      <div class="kpi-value" id="k_appToUW">—</div>
+      <div class="kpi-sub"><span id="t_appToUW" class="trend"></span><span class="muted">745 → UW Field</span></div>
+    </div>
+
+    <div class="card span-3 kpi-tile" data-kpi="t_appToClose">
+      <div class="kpi-label">Avg Days: App → Close</div>
+      <div class="kpi-value" id="k_appToClose">—</div>
+      <div class="kpi-sub"><span id="t_appToClose" class="trend"></span><span class="muted">745 → 748</span></div>
+    </div>
+
+    <div class="card span-3 kpi-tile" data-kpi="mixPurposeTop">
+      <div class="kpi-label">Purchase vs Refi Mix</div>
+      <div class="kpi-value" id="k_mixPurposeTop">—</div>
+      <div class="kpi-sub"><span id="t_mixPurposeTop" class="trend"></span><span class="muted">Top purpose share</span></div>
+    </div>
+
+    <!-- Charts / lists -->
     <div class="card span-6">
-      <div class="kpi-label">Loans by Milestone (CurrentMilestone)</div>
-      <canvas id="milestoneChart" height="180"></canvas>
+      <div class="kpi-label">Loans by Milestone</div>
+      <canvas id="c_milestone" height="180"></canvas>
       <div class="kpi-sub">Grouped by <code>Fields.Log.MS.CurrentMilestone</code></div>
     </div>
 
     <div class="card span-6">
       <div class="kpi-label">Loans by Loan Officer</div>
-      <canvas id="loChart" height="180"></canvas>
-      <div class="kpi-sub">Grouped by <code>Fields.317</code> (label includes LO total volume)</div>
+      <canvas id="c_lo" height="180"></canvas>
+      <div class="kpi-sub">Grouped by <code>Fields.317</code> (label includes volume)</div>
     </div>
 
     <div class="card span-12">
-      <div class="kpi-label">Loan Purpose (Field 19)</div>
-      <canvas id="purposeChart" height="160"></canvas>
-      <div class="kpi-sub">Bar chart grouped by <code>Fields.19</code></div>
+      <div class="kpi-label">Loan Purpose Distribution</div>
+      <canvas id="c_purpose" height="160"></canvas>
+      <div class="kpi-sub">Grouped by <code>Fields.19</code></div>
     </div>
 
-    <!-- Lists -->
     <div class="card span-6">
-      <div class="kpi-label">Average Milestone Duration</div>
-      <div class="list" id="milestoneDurationList">—</div>
-      <div class="kpi-sub">Avg duration for loans currently in each milestone (from <code>Fields.Log.MS.Duration.[Milestone]</code>)</div>
+      <div class="kpi-label">Rate Type Mix</div>
+      <div class="list" id="rateTypeList">—</div>
+      <div class="kpi-sub">Grouped by configured Rate Type field</div>
     </div>
 
     <div class="card span-6">
       <div class="kpi-label">Top Loan Officers</div>
-      <div class="list scrollable" id="loList">—</div>
-      <div class="kpi-sub">Top 10 by count (shows LO total volume too)</div>
+      <div class="list" id="topLoList">—</div>
+      <div class="kpi-sub">Top 10 by count (includes volume)</div>
     </div>
   </div>
 
   <!-- Debug -->
   <div class="card" style="margin-top:12px;">
     <details>
-      <summary>Debug output</summary>
+      <summary>Debug</summary>
       <pre id="debug"></pre>
     </details>
   </div>
 
+  <!-- Drill-through modal -->
+  <div class="backdrop" id="modalBackdrop">
+    <div class="modal">
+      <div class="modal-top">
+        <div>
+          <h3 id="modalTitle">Details</h3>
+          <div class="muted" id="modalSubtitle">—</div>
+        </div>
+        <div class="row">
+          <button class="btn" id="btnCopyLoans">Copy Loan Numbers</button>
+          <button class="btn" id="btnCloseModal">Close</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="modal-body">
+        <div class="list" id="modalList"></div>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // ---------- Logging ----------
+    // -----------------------------
+    // Logging
+    // -----------------------------
     const debugEl = document.getElementById("debug");
     const log = (...args) => {
-      const line = args.map(a => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
-      try { debugEl.textContent += (debugEl.textContent ? "\n" : "") + line; } catch {}
+      const line = args.map(a => typeof a === "string" ? a : JSON.stringify(a, null, 2)).join(" ");
+      debugEl.textContent += (debugEl.textContent ? "\n" : "") + line;
       try { console.log("[KPI]", ...args); } catch {}
     };
 
-    const ssfLoaded = (window.elli && elli.script);
-    document.getElementById("ssfStatus").textContent = ssfLoaded ? "Loaded ✅" : "NOT loaded ❌";
+    // -----------------------------
+    // SSF + Guest init
+    // -----------------------------
+    const ssfLoaded = !!(window.elli && elli.script);
+    document.getElementById("ssfStatus").textContent = ssfLoaded ? "Loaded ✅" : "Not loaded ❌";
 
-    // ---------- Guest init ----------
-    (function initGuestOnce() {
-      if (!ssfLoaded) {
-        document.getElementById("guestStatus").textContent = "SSF not loaded ❌";
-        return;
-      }
-      if (window.__guestInited) {
-        document.getElementById("guestStatus").textContent = "Already initialized ✅";
-        return;
-      }
-      try {
-        if (elli?.script?.guest?.create) {
-          window.__guestInited = true;
+    (function initGuest(){
+      if (!ssfLoaded) { document.getElementById("guestStatus").textContent = "SSF missing ❌"; return; }
+      if (window.__kpi_guest_ready) { document.getElementById("guestStatus").textContent = "Ready ✅"; return; }
+
+      try{
+        if (elli?.script?.guest?.create){
           elli.script.guest.create("", document.head);
-          document.getElementById("guestStatus").textContent = "Initialized ✅";
-          log("guest.create('', document.head) called ✅");
+          window.__kpi_guest_ready = true;
+          document.getElementById("guestStatus").textContent = "Ready ✅";
+          log("Guest initialized.");
         } else {
-          document.getElementById("guestStatus").textContent = "guest.create not found ⚠️";
+          document.getElementById("guestStatus").textContent = "guest.create missing ⚠️";
         }
-      } catch (e) {
+      }catch(e){
         document.getElementById("guestStatus").textContent = `Init failed ❌ (${e.message})`;
-        log("Guest init ERROR:", e.message);
+        log("Guest init error:", e.message);
       }
     })();
 
-    function formatMoney(n) {
-      const num = Number(String(n ?? "").replace(/,/g, ""));
-      if (!isFinite(num)) return "—";
-      return num.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-    }
+    // -----------------------------
+    // Utilities
+    // -----------------------------
+    const API_SERVER = "https://api.elliemae.com";
+    const $ = (id) => document.getElementById(id);
 
-    function formatMoneyShort(n) {
-      const num = Number(n);
-      if (!isFinite(num)) return "—";
+    const toNumber = (v) => {
+      const n = Number(String(v ?? "").replace(/,/g,"").trim());
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const safe = (v, fallback="—") => {
+      const s = String(v ?? "").trim();
+      return s ? s : fallback;
+    };
+
+    const money = (n) => {
+      const num = toNumber(n);
+      if (!Number.isFinite(num)) return "—";
+      return num.toLocaleString(undefined, { style:"currency", currency:"USD", maximumFractionDigits:0 });
+    };
+
+    const moneyShort = (n) => {
+      const num = toNumber(n);
+      if (!Number.isFinite(num)) return "—";
       const abs = Math.abs(num);
       if (abs >= 1e9) return `$${(num/1e9).toFixed(2)}B`;
       if (abs >= 1e6) return `$${(num/1e6).toFixed(2)}M`;
       if (abs >= 1e3) return `$${(num/1e3).toFixed(0)}K`;
-      return formatMoney(num);
-    }
+      return money(num);
+    };
 
-    function safeText(v, fallback="—") {
+    const parseDate = (v) => {
       const s = String(v ?? "").trim();
-      return s ? s : fallback;
+      if (!s) return null;
+
+      // Try native parse first
+      const d1 = new Date(s);
+      if (!isNaN(d1.getTime())) return d1;
+
+      // Try mm/dd/yyyy
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+      if (m){
+        const mm = Number(m[1]), dd = Number(m[2]), yy = Number(m[3].length === 2 ? "20"+m[3] : m[3]);
+        const d2 = new Date(yy, mm-1, dd);
+        if (!isNaN(d2.getTime())) return d2;
+      }
+      return null;
+    };
+
+    const daysBetween = (a, b) => {
+      if (!a || !b) return NaN;
+      const ms = b.getTime() - a.getTime();
+      return ms / (1000*60*60*24);
+    };
+
+    const monthWindow = () => {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth()+1, 1);
+      return { start, end };
+    };
+
+    const pct = (num) => (Number.isFinite(num) ? (num*100).toFixed(0)+"%" : "—");
+
+    function setLastRefresh(){
+      $("lastRefresh").textContent = new Date().toLocaleString();
     }
 
-    function setLastRefresh() {
-      const d = new Date();
-      document.getElementById("lastRefresh").textContent = d.toLocaleString();
-    }
-
-    // -------- Auth (UNCHANGED) --------
-    async function getUserAccessTokenForApi() {
+    // -----------------------------
+    // Auth (same behavior, refactored)
+    // -----------------------------
+    async function getAccessToken(){
       const auth = await elli.script.getObject("auth");
       const tok = await auth.getAccessToken();
 
+      // Sometimes returns an object with access_token; sometimes returns an auth code string
       if (tok && typeof tok === "object" && tok.access_token) return tok.access_token;
 
       const resp = await fetch("/api/exchange", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ authCode: tok })
       });
 
       const json = await resp.json();
+      if (!json?.access_token) throw new Error("Token exchange did not return access_token");
       return json.access_token;
     }
 
-    const API_SERVER = "https://api.elliemae.com";
+    // -----------------------------
+    // Folder loading
+    // -----------------------------
+    const folderSelect = $("folderSelect");
+    const folderStatus = $("folderStatus");
+    const btnRefresh = $("btnRefresh");
 
-    // ---------- Folder dropdown ----------
-    const folderSelect = document.getElementById("folderSelect");
-    const folderStatus = document.getElementById("folderStatus");
-    const resolvedFolderNameEl = document.getElementById("resolvedFolderName");
-    const btnPipeline = document.getElementById("btnPipeline");
-
-    let selectedFolderName = null;
-
-    function extractFolderList(json) {
-      if (Array.isArray(json)) return json;
-      if (Array.isArray(json?.loanFolders)) return json.loanFolders;
-      if (Array.isArray(json?.items)) return json.items;
-      if (Array.isArray(json?.folders)) return json.folders;
+    function extractFolders(payload){
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload?.loanFolders)) return payload.loanFolders;
+      if (Array.isArray(payload?.items)) return payload.items;
       return [];
     }
+    const folderName = (f) => (f?.folderName || f?.name || f?.FolderName || f?.Name || "").trim();
 
-    function getFolderName(f) {
-      return f?.folderName || f?.name || f?.FolderName || f?.Name || null;
-    }
-
-    async function loadFoldersIntoDropdown() {
+    async function loadFolders(){
       folderStatus.textContent = "Loading…";
       folderSelect.disabled = true;
-      btnPipeline.disabled = true;
-      folderSelect.innerHTML = `<option value="">Loading folders…</option>`;
+      btnRefresh.disabled = true;
 
-      const token = await getUserAccessTokenForApi();
+      const token = await getAccessToken();
       const url = `${API_SERVER}/encompass/v3/loanFolders?start=0&limit=2000`;
-      log("V3 loanFolders list GET:", url);
 
-      const resp = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
-      const json = await resp.json();
+      log("GET folders:", url);
 
-      const folders = extractFolderList(json);
-      log(`V3 folders returned: ${folders.length}`);
+      const r = await fetch(url, { headers:{ Authorization:`Bearer ${token}` } });
+      const json = await r.json();
 
-      const names = folders
-        .map(getFolderName)
-        .filter(Boolean)
-        .map(n => String(n).trim())
-        .filter(n => n.length > 0);
+      const folders = extractFolders(json).map(folderName).filter(Boolean);
+      const unique = Array.from(new Set(folders)).sort((a,b)=>a.localeCompare(b));
 
-      const uniqueNames = Array.from(new Set(names)).sort((a,b) => a.localeCompare(b));
-      if (!uniqueNames.length) throw new Error("No folder names found in V3 response.");
-
-      folderSelect.innerHTML =
-        `<option value="">Select a folder…</option>` +
-        uniqueNames.map(name => `<option value="${name}">${name}</option>`).join("");
-
-      folderStatus.textContent = "Ready ✅";
+      folderSelect.innerHTML = `<option value="">Select…</option>` + unique.map(n => `<option value="${n}">${n}</option>`).join("");
       folderSelect.disabled = false;
+      folderStatus.textContent = "Ready ✅";
 
-      const pipeline = uniqueNames.find(n => n.toLowerCase() === "pipeline");
-      if (pipeline) {
-        folderSelect.value = pipeline;
-        onFolderChanged();
+      const pipeline = unique.find(n => n.toLowerCase() === "pipeline");
+      if (pipeline) folderSelect.value = pipeline;
+
+      btnRefresh.disabled = !folderSelect.value;
+    }
+
+    folderSelect.addEventListener("change", () => {
+      btnRefresh.disabled = !folderSelect.value;
+    });
+
+    // -----------------------------
+    // Multi-select component (checkbox dropdown)
+    // -----------------------------
+    function createMultiSelect(mountEl, { placeholder="All", onChange }){
+      const root = document.createElement("div");
+
+      root.innerHTML = `
+        <button type="button" class="ms-btn"><span class="ms-label">${placeholder}</span><span>▾</span></button>
+        <div class="ms-menu">
+          <input class="input ms-search" placeholder="Search…" />
+          <div class="ms-actions">
+            <button type="button" class="btn ms-all">Select all</button>
+            <button type="button" class="btn ms-none">Select none</button>
+          </div>
+          <div class="ms-items"></div>
+        </div>
+      `;
+
+      mountEl.appendChild(root);
+
+      const btn = root.querySelector(".ms-btn");
+      const label = root.querySelector(".ms-label");
+      const menu = root.querySelector(".ms-menu");
+      const itemsEl = root.querySelector(".ms-items");
+      const search = root.querySelector(".ms-search");
+      const btnAll = root.querySelector(".ms-all");
+      const btnNone = root.querySelector(".ms-none");
+
+      let options = [];
+      let selected = new Set();
+
+      function render(){
+        const q = String(search.value ?? "").toLowerCase();
+        const filtered = options.filter(o => o.toLowerCase().includes(q));
+
+        itemsEl.innerHTML = filtered.map(o => {
+          const checked = selected.has(o) ? "checked" : "";
+          return `
+            <label class="ms-item">
+              <input type="checkbox" ${checked} data-value="${escapeHtml(o)}"/>
+              <span>${escapeHtml(o)}</span>
+            </label>
+          `;
+        }).join("");
+
+        // label
+        if (selected.size === 0) label.textContent = placeholder;
+        else if (selected.size === 1) label.textContent = Array.from(selected)[0];
+        else label.textContent = `${selected.size} selected`;
       }
+
+      function setOptions(list){
+        options = Array.from(new Set((list || []).map(s => String(s).trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+        // keep selection if still present
+        selected = new Set(Array.from(selected).filter(s => options.includes(s)));
+        render();
+      }
+
+      function setSelected(list){
+        selected = new Set((list || []).filter(Boolean));
+        // keep only valid
+        selected = new Set(Array.from(selected).filter(s => options.includes(s)));
+        render();
+        onChange?.(getSelected());
+      }
+
+      function getSelected(){
+        return Array.from(selected);
+      }
+
+      // open/close
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        menu.classList.toggle("open");
+      });
+
+      document.addEventListener("click", () => menu.classList.remove("open"));
+
+      // checkbox changes
+      itemsEl.addEventListener("change", (e) => {
+        const cb = e.target;
+        if (!(cb instanceof HTMLInputElement)) return;
+        const v = cb.getAttribute("data-value");
+        if (!v) return;
+
+        // data-value is escaped; re-pull from sibling text instead to avoid de-escaping complexity
+        const text = cb.parentElement?.querySelector("span")?.textContent;
+        const val = String(text ?? "").trim();
+        if (!val) return;
+
+        if (cb.checked) selected.add(val);
+        else selected.delete(val);
+
+        render();
+        onChange?.(getSelected());
+      });
+
+      btnAll.addEventListener("click", (e) => {
+        e.preventDefault();
+        selected = new Set(options);
+        render();
+        onChange?.(getSelected());
+      });
+
+      btnNone.addEventListener("click", (e) => {
+        e.preventDefault();
+        selected = new Set();
+        render();
+        onChange?.(getSelected());
+      });
+
+      search.addEventListener("input", render);
+
+      return { setOptions, setSelected, getSelected };
     }
 
-    function clearCanvas(id) {
-      const c = document.getElementById(id);
-      if (!c) return;
-      const ctx = c.getContext("2d");
-      ctx.clearRect(0, 0, c.width, c.height);
-    }
-
-    function onFolderChanged() {
-      selectedFolderName = folderSelect.value || null;
-      resolvedFolderNameEl.textContent = selectedFolderName || "—";
-      btnPipeline.disabled = !selectedFolderName;
-
-      // Clear headline KPIs
-      document.getElementById("kpiLoans").textContent = "—";
-      document.getElementById("kpiTotalVol").textContent = "—";
-      document.getElementById("kpiAvg").textContent = "—";
-      document.getElementById("kpiLoCount").textContent = "—";
-
-      // Clear lists
-      document.getElementById("milestoneDurationList").textContent = "—";
-      document.getElementById("loList").textContent = "—";
-
-      // Clear charts
-      clearCanvas("milestoneChart");
-      clearCanvas("loChart");
-      clearCanvas("purposeChart");
-
-      log("Folder selected:", selectedFolderName || "(none)");
-    }
-
-    folderSelect.addEventListener("change", onFolderChanged);
-
-    // ---------- Response helpers ----------
-    function summarizeJsonShape(json) {
-      const keys = json && typeof json === "object" ? Object.keys(json) : [];
-      const counts = {
-        items: Array.isArray(json?.items) ? json.items.length : null,
-        loans: Array.isArray(json?.loans) ? json.loans.length : null,
-        loanPipeline: Array.isArray(json?.loanPipeline) ? json.loanPipeline.length : null,
-        pipeline: Array.isArray(json?.pipeline) ? json.pipeline.length : null,
-        data: Array.isArray(json?.data) ? json.data.length : null
-      };
-      return { keys, counts };
-    }
-
-    function pickFirstArray(json) {
-      if (Array.isArray(json?.items)) return json.items;
-      if (Array.isArray(json?.loans)) return json.loans;
-      if (Array.isArray(json?.loanPipeline)) return json.loanPipeline;
-      if (Array.isArray(json?.pipeline)) return json.pipeline;
-      if (Array.isArray(json?.data)) return json.data;
-      if (Array.isArray(json)) return json;
-      return [];
-    }
-
-    function sortedEntries(obj) {
-      return Object.entries(obj).sort((a,b) => b[1] - a[1]);
-    }
-
-    function escapeHtml(s) {
+    function escapeHtml(s){
       return String(s ?? "")
         .replace(/&/g,"&amp;")
         .replace(/</g,"&lt;")
@@ -391,303 +627,614 @@
         .replace(/'/g,"&#039;");
     }
 
-    function renderTopListWithVolume(containerId, entries, volByKey, topN=10) {
-      const el = document.getElementById(containerId);
-      if (!el) return;
-      if (!entries.length) { el.textContent = "—"; return; }
+    // mount multi-selects
+    const msLo = createMultiSelect(document.querySelector('[data-ms="lo"]'), {
+      placeholder:"All LOs",
+      onChange: () => {}
+    });
+    const msPurpose = createMultiSelect(document.querySelector('[data-ms="purpose"]'), {
+      placeholder:"All Purposes",
+      onChange: () => {}
+    });
+    const msRateType = createMultiSelect(document.querySelector('[data-ms="rateType"]'), {
+      placeholder:"All Rate Types",
+      onChange: () => {}
+    });
+    const msMilestone = createMultiSelect(document.querySelector('[data-ms="milestone"]'), {
+      placeholder:"All Milestones",
+      onChange: () => {}
+    });
 
-      el.innerHTML = entries.slice(0, topN).map(([k,v]) => `
-        <div class="list-item">
-          <div>
-            <b>${escapeHtml(k)}</b>
-            <div class="badge">${v} loans • ${escapeHtml(formatMoneyShort(volByKey?.[k] || 0))}</div>
-          </div>
-          <div class="right kpi-mini">${v}</div>
-        </div>
-      `).join("");
+    // -----------------------------
+    // Pipeline fetch
+    // -----------------------------
+    function pickLoansArray(payload){
+      if (Array.isArray(payload?.items)) return payload.items;
+      if (Array.isArray(payload?.loans)) return payload.loans;
+      if (Array.isArray(payload?.loanPipeline)) return payload.loanPipeline;
+      if (Array.isArray(payload?.pipeline)) return payload.pipeline;
+      if (Array.isArray(payload)) return payload;
+      return [];
     }
 
-    function renderAvgDurationList(containerId, rows, topN=10) {
-      const el = document.getElementById(containerId);
-      if (!el) return;
-      if (!rows.length) { el.textContent = "—"; return; }
+    async function fetchPipelineLoans({ token, folderName, limit, fields }){
+      const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
+      const body = { fields, loanFolders:[folderName] };
 
-      el.innerHTML = rows.slice(0, topN).map(r => `
-        <div class="list-item">
-          <div>
-            <b>${escapeHtml(r.milestone)}</b>
-            <div class="badge">${r.n} loans w/ duration</div>
-          </div>
-          <div class="right kpi-mini">${isFinite(r.avgDays) ? r.avgDays.toFixed(1) : "—"} d</div>
-        </div>
-      `).join("");
-    }
+      log("POST pipeline:", url);
+      log("Body:", body);
 
-    // ---------- Simple bar chart renderer ----------
-    function renderBarChart(canvasId, entries, maxBars=12) {
-      const canvas = document.getElementById(canvasId);
-      if (!canvas) return;
-
-      // responsive width
-      const parentWidth = canvas.parentElement?.clientWidth || 800;
-      canvas.width = Math.max(420, parentWidth - 24);
-
-      const ctx = canvas.getContext("2d");
-      const w = canvas.width;
-      const h = canvas.height;
-
-      ctx.clearRect(0, 0, w, h);
-
-      const top = entries.slice(0, maxBars);
-      if (!top.length) {
-        ctx.fillText("No data", 10, 20);
-        return;
-      }
-
-      const labels = top.map(([k]) => k);
-      const data = top.map(([,v]) => v);
-      const maxVal = Math.max(...data, 1);
-
-      const padding = 28;
-      const barGap = 10;
-      const barWidth = Math.max(10, (w - padding * 2 - barGap * (labels.length - 1)) / labels.length);
-      const baseline = h - padding;
-
-      // baseline
-      ctx.beginPath();
-      ctx.moveTo(padding, baseline);
-      ctx.lineTo(w - padding, baseline);
-      ctx.stroke();
-
-      labels.forEach((label, i) => {
-        const val = data[i];
-        const barHeight = Math.round((val / maxVal) * (h - padding * 2));
-        const x = padding + i * (barWidth + barGap);
-        const y = baseline - barHeight;
-
-        ctx.fillRect(x, y, barWidth, barHeight);
-        ctx.fillText(String(val), x, Math.max(12, y - 6));
-
-        const short = label.length > 18 ? label.slice(0, 18) + "…" : label;
-        ctx.fillText(short, x, h - 10);
-      });
-    }
-
-    // -------- V3 pipeline fetch helper --------
-    async function fetchLoanPipeline(token, url, selectedFolderName, fields, limit) {
-      const body = {
-        fields,
-        loanFolders: [ selectedFolderName ]
-      };
-
-      log("V3 loanPipeline request URL:", url);
-      log("V3 loanPipeline request body:", body);
-
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      const r = await fetch(url, {
+        method:"POST",
+        headers:{
+          Authorization:`Bearer ${token}`,
+          "Content-Type":"application/json"
+        },
         body: JSON.stringify(body)
       });
 
-      const text = await resp.text();
-      log("V3 response status:", String(resp.status));
-      log("V3 response text length:", String(text.length));
-
-      if (!resp.ok) {
-        log("V3 ERROR body:", text);
-        throw new Error(`v3 loanPipeline ${resp.status}`);
+      const text = await r.text();
+      if (!r.ok){
+        log("Pipeline error status:", r.status);
+        log("Pipeline error body:", text.slice(0, 2000));
+        throw new Error(`loanPipeline failed (${r.status})`);
       }
 
       let json;
       try { json = JSON.parse(text); }
-      catch {
-        log("V3 raw response (non-JSON):", text.slice(0, 1000));
-        throw new Error("V3 returned non-JSON");
-      }
+      catch { throw new Error("loanPipeline returned non-JSON"); }
 
-      const shape = summarizeJsonShape(json);
-      log("V3 response keys:", shape.keys.join(", "));
-      log("V3 response counts:", shape.counts);
-
-      const loans = pickFirstArray(json);
-      log("V3 detected loans array length:", String(loans.length));
-
+      const loans = pickLoansArray(json);
+      log("Loans returned:", loans.length);
       return loans;
     }
 
-    // -------- V3 pipeline KPIs --------
-    async function refreshPipelineKpis() {
-      if (!selectedFolderName) {
-        log("No folder selected.");
+    // -----------------------------
+    // Chart rendering (simple bars)
+    // -----------------------------
+    function barChart(canvasId, entries, { maxBars=12 }={}){
+      const c = $(canvasId);
+      if (!c) return;
+
+      const parentW = c.parentElement?.clientWidth || 900;
+      c.width = Math.max(420, parentW - 20);
+
+      const ctx = c.getContext("2d");
+      const w = c.width;
+      const h = c.height;
+
+      ctx.clearRect(0,0,w,h);
+
+      const top = (entries || []).slice(0, maxBars);
+      if (!top.length){
+        ctx.fillText("No data", 10, 18);
         return;
       }
 
-      const token = await getUserAccessTokenForApi();
-      const limit = Math.max(1, Math.min(1000, Number(document.getElementById("pipeLimit").value || 1000)));
-      const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
+      const vals = top.map(e => e[1]);
+      const maxVal = Math.max(...vals, 1);
 
-      log("Refreshing pipeline KPIs (V3)… Folder:", selectedFolderName);
+      const pad = 26;
+      const gap = 10;
+      const bw = Math.max(10, (w - pad*2 - gap*(top.length-1)) / top.length);
+      const base = h - pad;
 
-      // PASS 1: pull core fields to discover milestones + compute most KPIs
-      const coreFields = [
-        "Loan.LoanAmount",
-        "Loan.LoanNumber",
-        "Fields.Log.MS.CurrentMilestone",
-        "Fields.19",
-        "Fields.317"
-      ];
+      // baseline
+      ctx.beginPath();
+      ctx.moveTo(pad, base);
+      ctx.lineTo(w - pad, base);
+      ctx.stroke();
 
-      const loans1 = await fetchLoanPipeline(token, url, selectedFolderName, coreFields, limit);
+      top.forEach(([label, value], i) => {
+        const v = Number(value) || 0;
+        const bh = Math.round((v / maxVal) * (h - pad*2));
+        const x = pad + i*(bw+gap);
+        const y = base - bh;
 
-      // Compute KPIs (counts/volume/by LO/by purpose/by milestone)
-      let total = 0;
-      const byMilestone = {};
-      const byPurpose = {};
-      const byLO = {};
-      const volByLO = {};
-      const loanNumToMilestone = {};
-      const milestonesFound = new Set();
+        ctx.fillRect(x, y, bw, bh);
+        ctx.fillText(String(v), x, Math.max(12, y - 6));
 
-      for (const l of loans1) {
-        const loanNumber =
-          l?.fields?.["Loan.LoanNumber"] ??
-          l?.LoanNumber ??
-          l?.loanNumber ?? null;
-
-        const amtVal =
-          l?.fields?.["Loan.LoanAmount"] ??
-          l?.fields?.["Loan.LoanAmount.Value"] ??
-          l?.fields?.["Fields.1109"] ??
-          l?.LoanAmount ?? l?.loanAmount ?? 0;
-
-        const amt = Number(String(amtVal ?? "").replace(/,/g, ""));
-        if (isFinite(amt)) total += amt;
-
-        const msVal =
-          l?.fields?.["Fields.Log.MS.CurrentMilestone"] ??
-          l?.fields?.["Loan.MilestoneName"] ??
-          l?.MilestoneName ?? l?.milestoneName ?? null;
-
-        const ms = safeText(msVal, "Unknown");
-        byMilestone[ms] = (byMilestone[ms] || 0) + 1;
-        milestonesFound.add(ms);
-
-        if (loanNumber != null) {
-          loanNumToMilestone[String(loanNumber)] = ms;
-        }
-
-        const purposeVal =
-          l?.fields?.["Fields.19"] ??
-          l?.fields?.["Loan.LoanPurpose"] ??
-          l?.LoanPurpose ?? l?.loanPurpose ?? null;
-
-        const purpose = safeText(purposeVal, "Null");
-        byPurpose[purpose] = (byPurpose[purpose] || 0) + 1;
-
-        const loVal =
-          l?.fields?.["Fields.317"] ??
-          l?.fields?.["Loan.LoanOfficer"] ??
-          l?.fields?.["Loan.LoanOfficerName"] ??
-          null;
-
-        const lo = safeText(loVal, "Null");
-        byLO[lo] = (byLO[lo] || 0) + 1;
-        volByLO[lo] = (volByLO[lo] || 0) + (isFinite(amt) ? amt : 0);
-      }
-
-      // PASS 2: pull ONLY the duration fields needed (based on milestones found)
-      // Field pattern: Fields.Log.MS.Duration.[Milestone Name]
-      const durationFields = Array.from(milestonesFound)
-        .filter(Boolean)
-        .map(ms => `Fields.Log.MS.Duration.${ms}`);
-
-      // Always include loan number so we can map durations back to milestone buckets safely
-      const durationRequestFields = ["Loan.LoanNumber", ...durationFields];
-
-      log("Milestones discovered (pass 1):", Array.from(milestonesFound));
-      log("Duration fields requested (pass 2):", durationFields);
-
-      const loans2 = await fetchLoanPipeline(token, url, selectedFolderName, durationRequestFields, limit);
-
-      const durationSumByMilestone = {};
-      const durationCountByMilestone = {};
-
-      for (const l of loans2) {
-        const loanNumber =
-          l?.fields?.["Loan.LoanNumber"] ??
-          l?.LoanNumber ?? l?.loanNumber ?? null;
-
-        const ms = loanNumToMilestone[String(loanNumber ?? "")] || null;
-        if (!ms) continue;
-
-        const durationKey = `Fields.Log.MS.Duration.${ms}`;
-        const durRaw = l?.fields?.[durationKey];
-
-        // Best-effort numeric parse (handles "12", "12.3", "12 days", etc.)
-        const dur = Number(String(durRaw ?? "").replace(/[^0-9.]/g, ""));
-        if (!isFinite(dur)) continue;
-
-        durationSumByMilestone[ms] = (durationSumByMilestone[ms] || 0) + dur;
-        durationCountByMilestone[ms] = (durationCountByMilestone[ms] || 0) + 1;
-      }
-
-      const avgDurationRows = Object.keys(durationSumByMilestone).map(ms => {
-        const sum = durationSumByMilestone[ms] || 0;
-        const n = durationCountByMilestone[ms] || 0;
-        return { milestone: ms, avgDays: n ? (sum / n) : NaN, n };
-      }).sort((a,b) => (b.avgDays || 0) - (a.avgDays || 0));
-
-      // Headline KPIs
-      document.getElementById("kpiLoans").textContent = String(loans1.length);
-      document.getElementById("kpiTotalVol").textContent = formatMoney(total);
-
-      const avg = loans1.length ? (total / loans1.length) : 0;
-      document.getElementById("kpiAvg").textContent = loans1.length ? formatMoney(avg) : "—";
-
-      const uniqueLOs = Object.keys(byLO).filter(k => k !== "Null").length || (Object.keys(byLO).length);
-      document.getElementById("kpiLoCount").textContent = String(uniqueLOs);
-
-      // Render charts + lists
-      const milestoneEntries = sortedEntries(byMilestone);
-      const purposeEntries = sortedEntries(byPurpose);
-      const loEntries = sortedEntries(byLO);
-
-      // LO chart label includes LO volume: "Name • $2.35M"
-      const loChartEntries = loEntries.map(([loName, count]) => {
-        const vol = volByLO[loName] || 0;
-        return [`${loName} • ${formatMoneyShort(vol)}`, count];
+        const short = String(label).length > 18 ? String(label).slice(0,18)+"…" : String(label);
+        ctx.fillText(short, x, h - 10);
       });
-
-      renderBarChart("milestoneChart", milestoneEntries, 12);
-      renderBarChart("loChart", loChartEntries, 6);
-      renderBarChart("purposeChart", purposeEntries, 14);
-
-      renderAvgDurationList("milestoneDurationList", avgDurationRows, 10);
-      renderTopListWithVolume("loList", loEntries, volByLO, 10);
-
-      setLastRefresh();
-      log("Pipeline KPIs refreshed ✅");
     }
 
-    // ---------- Buttons ----------
-    document.getElementById("btnPipeline").addEventListener("click", () => {
-      refreshPipelineKpis().catch(e => {
-        log("Pipeline KPI ERROR:", e.message);
+    // -----------------------------
+    // KPI computation & drill-through
+    // -----------------------------
+    const state = {
+      loansRaw: [],
+      loansFiltered: [],
+      lastSnapshotKey: "kpi:lastSnapshot",
+      viewKey: "kpi:views",
+      drill: {} // kpiName -> loan list
+    };
+
+    function getField(loan, key){
+      // v3 pipeline commonly returns loan.fields map
+      return loan?.fields?.[key] ?? loan?.[key] ?? null;
+    }
+
+    function normalizeLoan(loan){
+      const loanNumber = safe(getField(loan, "Loan.LoanNumber") ?? getField(loan, "Loan.LoanNumber.Value") ?? loan?.LoanNumber ?? loan?.loanNumber, "");
+      const amt = toNumber(getField(loan, "Loan.LoanAmount") ?? getField(loan, "Loan.LoanAmount.Value") ?? loan?.LoanAmount ?? loan?.loanAmount);
+      const lo = safe(getField(loan, "Fields.317") ?? getField(loan, "Loan.LoanOfficer") ?? getField(loan, "Loan.LoanOfficerName"), "Unassigned");
+      const purpose = safe(getField(loan, "Fields.19") ?? getField(loan, "Loan.LoanPurpose"), "Unknown");
+      const milestone = safe(getField(loan, "Fields.Log.MS.CurrentMilestone") ?? getField(loan, "Loan.MilestoneName") ?? loan?.MilestoneName, "Unknown");
+      const appDate = parseDate(getField(loan, "Fields.745"));
+      const discDate = parseDate(getField(loan, "Fields.3142"));
+      const closeDate = parseDate(getField(loan, "Fields.748"));
+
+      const uwField = $("uwField").value.trim();
+      const uwDate = parseDate(getField(loan, uwField));
+
+      const rateField = $("rateTypeField").value.trim();
+      const rateType = safe(getField(loan, rateField), "Unknown");
+
+      return { loanNumber, amt, lo, purpose, milestone, appDate, discDate, closeDate, uwDate, rateType, _raw: loan };
+    }
+
+    function applyFilters(loans){
+      const selLO = new Set(msLo.getSelected());
+      const selPurpose = new Set(msPurpose.getSelected());
+      const selRate = new Set(msRateType.getSelected());
+      const selMs = new Set(msMilestone.getSelected());
+
+      return loans.filter(l => {
+        if (selLO.size && !selLO.has(l.lo)) return false;
+        if (selPurpose.size && !selPurpose.has(l.purpose)) return false;
+        if (selRate.size && !selRate.has(l.rateType)) return false;
+        if (selMs.size && !selMs.has(l.milestone)) return false;
+        return true;
+      });
+    }
+
+    function sortEntries(obj){
+      return Object.entries(obj).sort((a,b)=> (b[1]-a[1]));
+    }
+
+    function renderList(elId, entries, { topN=10, volByKey=null }={}){
+      const el = $(elId);
+      if (!el) return;
+      if (!entries.length){ el.textContent = "—"; return; }
+
+      el.innerHTML = entries.slice(0, topN).map(([k,v]) => {
+        const vol = volByKey ? volByKey[k] : null;
+        return `
+          <div class="list-item">
+            <div>
+              <b>${escapeHtml(k)}</b>
+              <div class="badge">${v} loans${volByKey ? ` • ${escapeHtml(moneyShort(vol || 0))}` : ""}</div>
+            </div>
+            <div class="right"><b>${v}</b></div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function trendText(current, prior){
+      if (!Number.isFinite(current) || !Number.isFinite(prior) || prior === 0) return "";
+      const delta = (current - prior) / Math.abs(prior);
+      const sign = delta >= 0 ? "up" : "down";
+      const txt = `${delta >= 0 ? "▲" : "▼"} ${(Math.abs(delta)*100).toFixed(0)}%`;
+      return { txt, sign };
+    }
+
+    function setTrend(elId, current, prior){
+      const el = $(elId);
+      if (!el) return;
+      el.textContent = "";
+      el.classList.remove("up","down");
+      const t = trendText(current, prior);
+      if (!t) return;
+      el.textContent = t.txt;
+      el.classList.add(t.sign);
+    }
+
+    function setHealth(tileEl, kind){
+      tileEl.classList.remove("health-ok","health-warn","health-bad");
+      if (kind) tileEl.classList.add(kind);
+    }
+
+    function computeKpis(loans){
+      const totalUnits = loans.length;
+      const totalVol = loans.reduce((a,l)=>a+(Number.isFinite(l.amt)?l.amt:0), 0);
+      const avgAmt = totalUnits ? (totalVol/totalUnits) : NaN;
+
+      const loSet = new Set(loans.map(l=>l.lo).filter(v=>v && v !== "Unassigned"));
+      const uniqueLOs = loSet.size;
+
+      // MTD window
+      const { start, end } = monthWindow();
+
+      const appsMTDLoans = loans.filter(l => l.appDate && l.appDate >= start && l.appDate < end);
+      const appsMTD = appsMTDLoans.length;
+
+      const fundedMTDLoans = loans.filter(l => l.closeDate && l.closeDate >= start && l.closeDate < end);
+      const fundedMTD = fundedMTDLoans.length;
+
+      const pullThrough = appsMTD ? (fundedMTD / appsMTD) : NaN;
+
+      const threshold = Math.max(1, Math.min(365, Number($("ageDays").value || 45)));
+      const now = new Date();
+      const agedLoansList = loans.filter(l => {
+        if (!l.appDate) return false;
+        return daysBetween(l.appDate, now) > threshold;
+      });
+      const agedLoans = agedLoansList.length;
+
+      // Turn times
+      const appToDiscList = loans.map(l => daysBetween(l.appDate, l.discDate)).filter(d => Number.isFinite(d) && d >= 0);
+      const appToUWList   = loans.map(l => daysBetween(l.appDate, l.uwDate)).filter(d => Number.isFinite(d) && d >= 0);
+      const appToCloseList= loans.map(l => daysBetween(l.appDate, l.closeDate)).filter(d => Number.isFinite(d) && d >= 0);
+
+      const avg = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : NaN;
+
+      const avgAppToDisc = avg(appToDiscList);
+      const avgAppToUW   = avg(appToUWList);
+      const avgAppToClose= avg(appToCloseList);
+
+      // Mix: purpose distribution (also used for chart)
+      const byPurpose = {};
+      for (const l of loans) byPurpose[l.purpose] = (byPurpose[l.purpose] || 0) + 1;
+
+      const purposeEntries = sortEntries(byPurpose);
+      const topPurpose = purposeEntries[0]?.[0] ?? "—";
+      const topPurposeShare = totalUnits ? (purposeEntries[0]?.[1] || 0) / totalUnits : NaN;
+
+      // Group: milestone, LO, rate type
+      const byMilestone = {};
+      const byLO = {};
+      const volByLO = {};
+      const byRateType = {};
+
+      for (const l of loans){
+        byMilestone[l.milestone] = (byMilestone[l.milestone] || 0) + 1;
+        byLO[l.lo] = (byLO[l.lo] || 0) + 1;
+        volByLO[l.lo] = (volByLO[l.lo] || 0) + (Number.isFinite(l.amt) ? l.amt : 0);
+        byRateType[l.rateType] = (byRateType[l.rateType] || 0) + 1;
+      }
+
+      const milestoneEntries = sortEntries(byMilestone);
+      const loEntries = sortEntries(byLO);
+      const rateEntries = sortEntries(byRateType);
+
+      // Drill-through sets
+      state.drill = {
+        pipelineUnits: loans,
+        pipelineVol: loans,
+        avgLoanAmt: loans,
+        uniqueLOs: loans,
+        appsMTD: appsMTDLoans,
+        fundedMTD: fundedMTDLoans,
+        pullThrough: appsMTDLoans, // drill to apps cohort
+        agedLoans: agedLoansList,
+        t_appToDisc: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.discDate)) && daysBetween(l.appDate, l.discDate) >= 0),
+        t_appToUW: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.uwDate)) && daysBetween(l.appDate, l.uwDate) >= 0),
+        t_appToClose: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.closeDate)) && daysBetween(l.appDate, l.closeDate) >= 0),
+        mixPurposeTop: loans.filter(l => l.purpose === topPurpose)
+      };
+
+      return {
+        totalUnits, totalVol, avgAmt, uniqueLOs,
+        appsMTD, fundedMTD, pullThrough,
+        agedLoans, threshold,
+        avgAppToDisc, avgAppToUW, avgAppToClose,
+        topPurpose, topPurposeShare,
+        milestoneEntries, loEntries, volByLO, purposeEntries, rateEntries
+      };
+    }
+
+    function renderKpis(k, prior){
+      // Values
+      $("k_pipelineUnits").textContent = String(k.totalUnits);
+      $("k_pipelineVol").textContent   = money(k.totalVol);
+      $("k_avgLoanAmt").textContent    = Number.isFinite(k.avgAmt) ? money(k.avgAmt) : "—";
+      $("k_uniqueLOs").textContent     = String(k.uniqueLOs);
+
+      $("k_appsMTD").textContent       = String(k.appsMTD);
+      $("k_fundedMTD").textContent     = String(k.fundedMTD);
+      $("k_pullThrough").textContent   = Number.isFinite(k.pullThrough) ? pct(k.pullThrough) : "—";
+      $("k_agedLoans").textContent     = String(k.agedLoans);
+
+      $("k_appToDisc").textContent     = Number.isFinite(k.avgAppToDisc) ? k.avgAppToDisc.toFixed(1) : "—";
+      $("k_appToUW").textContent       = Number.isFinite(k.avgAppToUW) ? k.avgAppToUW.toFixed(1) : "—";
+      $("k_appToClose").textContent    = Number.isFinite(k.avgAppToClose) ? k.avgAppToClose.toFixed(1) : "—";
+      $("k_mixPurposeTop").textContent = k.topPurpose === "—" ? "—" : `${k.topPurpose} • ${pct(k.topPurposeShare)}`;
+
+      // Trends
+      if (prior){
+        setTrend("t_pipelineUnits", k.totalUnits, prior.totalUnits);
+        setTrend("t_pipelineVol",   k.totalVol,   prior.totalVol);
+        setTrend("t_avgLoanAmt",    k.avgAmt,     prior.avgAmt);
+        setTrend("t_uniqueLOs",     k.uniqueLOs,  prior.uniqueLOs);
+
+        setTrend("t_appsMTD",       k.appsMTD,     prior.appsMTD);
+        setTrend("t_fundedMTD",     k.fundedMTD,   prior.fundedMTD);
+        setTrend("t_pullThrough",   k.pullThrough, prior.pullThrough);
+        setTrend("t_agedLoans",     k.agedLoans,   prior.agedLoans);
+
+        setTrend("t_appToDisc",     k.avgAppToDisc, prior.avgAppToDisc);
+        setTrend("t_appToUW",       k.avgAppToUW,   prior.avgAppToUW);
+        setTrend("t_appToClose",    k.avgAppToClose, prior.avgAppToClose);
+        // mix trend is not numeric-stable; omit
+      }
+
+      // Health coloring (simple, can tune)
+      const tiles = Array.from(document.querySelectorAll(".kpi-tile"));
+      for (const t of tiles) t.classList.remove("health-ok","health-warn","health-bad");
+
+      // Example thresholds:
+      // - App→Disclosure: warn > 3 days, bad > 5 days
+      setHealth(document.querySelector('[data-kpi="t_appToDisc"]'),
+        Number.isFinite(k.avgAppToDisc) ? (k.avgAppToDisc > 5 ? "health-bad" : (k.avgAppToDisc > 3 ? "health-warn" : "health-ok")) : null
+      );
+      // - Aging: warn if >10% aged, bad if >20%
+      const agedRatio = k.totalUnits ? (k.agedLoans / k.totalUnits) : NaN;
+      setHealth(document.querySelector('[data-kpi="agedLoans"]'),
+        Number.isFinite(agedRatio) ? (agedRatio > 0.20 ? "health-bad" : (agedRatio > 0.10 ? "health-warn" : "health-ok")) : null
+      );
+    }
+
+    function renderBreakdowns(k){
+      // milestone
+      barChart("c_milestone", k.milestoneEntries, { maxBars: 12 });
+
+      // LO chart labels include volume
+      const loChartEntries = k.loEntries.slice(0, 8).map(([name,count]) => {
+        const vol = k.volByLO[name] || 0;
+        return [`${name} • ${moneyShort(vol)}`, count];
+      });
+      barChart("c_lo", loChartEntries, { maxBars: 8 });
+
+      // purpose
+      barChart("c_purpose", k.purposeEntries, { maxBars: 14 });
+
+      // rate list
+      renderList("rateTypeList", k.rateEntries, { topN: 12 });
+
+      // top LOs
+      renderList("topLoList", k.loEntries, { topN: 10, volByKey: k.volByLO });
+    }
+
+    // -----------------------------
+    // Drill-through modal
+    // -----------------------------
+    const modalBackdrop = $("modalBackdrop");
+    const modalTitle = $("modalTitle");
+    const modalSubtitle = $("modalSubtitle");
+    const modalList = $("modalList");
+    let currentModalLoans = [];
+
+    function openModal({ title, subtitle, loans }){
+      currentModalLoans = loans || [];
+      modalTitle.textContent = title;
+      modalSubtitle.textContent = subtitle;
+
+      if (!currentModalLoans.length){
+        modalList.innerHTML = `<div class="muted">No loans matched.</div>`;
+      } else {
+        modalList.innerHTML = currentModalLoans.slice(0, 250).map(l => {
+          const num = safe(l.loanNumber,"");
+          const amt = Number.isFinite(l.amt) ? moneyShort(l.amt) : "—";
+          const app = l.appDate ? l.appDate.toLocaleDateString() : "—";
+          const ms = safe(l.milestone, "—");
+          return `
+            <div class="list-item">
+              <div>
+                <b class="mono">${escapeHtml(num || "(no loan #)")}</b>
+                <div class="badge">${escapeHtml(l.lo)} • ${escapeHtml(l.purpose)} • ${escapeHtml(ms)} • App: ${escapeHtml(app)}</div>
+              </div>
+              <div class="right"><b>${escapeHtml(amt)}</b></div>
+            </div>
+          `;
+        }).join("");
+
+        if (currentModalLoans.length > 250){
+          modalList.innerHTML += `<div class="muted">Showing first 250 of ${currentModalLoans.length} loans.</div>`;
+        }
+      }
+
+      modalBackdrop.classList.add("open");
+    }
+
+    $("btnCloseModal").addEventListener("click", ()=> modalBackdrop.classList.remove("open"));
+    modalBackdrop.addEventListener("click", (e)=> { if (e.target === modalBackdrop) modalBackdrop.classList.remove("open"); });
+
+    $("btnCopyLoans").addEventListener("click", async ()=>{
+      const nums = currentModalLoans.map(l => l.loanNumber).filter(Boolean);
+      const text = nums.join("\n");
+      try{
+        await navigator.clipboard.writeText(text);
+        alert(`Copied ${nums.length} loan numbers to clipboard.`);
+      }catch{
+        alert("Clipboard copy failed (browser permissions).");
+      }
+    });
+
+    // click KPI tile
+    document.addEventListener("click", (e) => {
+      const tile = e.target.closest?.(".kpi-tile");
+      if (!tile) return;
+
+      const key = tile.getAttribute("data-kpi");
+      const loans = state.drill[key] || [];
+      openModal({
+        title: `Drill-through: ${key}`,
+        subtitle: `${loans.length} loans`,
+        loans
       });
     });
 
-    document.getElementById("btnClear").addEventListener("click", () => {
-      debugEl.textContent = "";
-      log("Debug cleared ✅");
+    // -----------------------------
+    // Saved views / presets (QoL)
+    // -----------------------------
+    function getViews(){
+      try { return JSON.parse(localStorage.getItem(state.viewKey) || "[]"); }
+      catch { return []; }
+    }
+    function setViews(v){
+      localStorage.setItem(state.viewKey, JSON.stringify(v || []));
+    }
+
+    function captureView(){
+      return {
+        name: `View ${new Date().toLocaleString()}`,
+        folder: folderSelect.value || "",
+        limit: $("limit").value,
+        ageDays: $("ageDays").value,
+        uwField: $("uwField").value,
+        rateTypeField: $("rateTypeField").value,
+        filters: {
+          lo: msLo.getSelected(),
+          purpose: msPurpose.getSelected(),
+          rateType: msRateType.getSelected(),
+          milestone: msMilestone.getSelected()
+        }
+      };
+    }
+
+    function applyView(v){
+      if (!v) return;
+      folderSelect.value = v.folder || folderSelect.value;
+      $("limit").value = v.limit ?? $("limit").value;
+      $("ageDays").value = v.ageDays ?? $("ageDays").value;
+      $("uwField").value = v.uwField ?? $("uwField").value;
+      $("rateTypeField").value = v.rateTypeField ?? $("rateTypeField").value;
+
+      // options must already be loaded; setSelected will ignore invalids
+      msLo.setSelected(v.filters?.lo || []);
+      msPurpose.setSelected(v.filters?.purpose || []);
+      msRateType.setSelected(v.filters?.rateType || []);
+      msMilestone.setSelected(v.filters?.milestone || []);
+
+      btnRefresh.disabled = !folderSelect.value;
+    }
+
+    $("btnSaveView").addEventListener("click", () => {
+      const v = captureView();
+      const name = prompt("Name this view:", v.name);
+      if (!name) return;
+      v.name = name;
+
+      const views = getViews();
+      views.unshift(v);
+      setViews(views.slice(0, 20));
+      alert("View saved.");
     });
 
-    // ---------- On load ----------
-    (async function init() {
-      try {
-        await loadFoldersIntoDropdown();
-      } catch (e) {
+    $("btnLoadView").addEventListener("click", () => {
+      const views = getViews();
+      if (!views.length) { alert("No saved views yet."); return; }
+
+      const menu = views.map((v,i)=> `${i+1}. ${v.name}`).join("\n");
+      const pick = prompt(`Choose view number:\n\n${menu}`);
+      const idx = Number(pick) - 1;
+      if (!Number.isFinite(idx) || idx < 0 || idx >= views.length) return;
+
+      applyView(views[idx]);
+      alert(`Loaded: ${views[idx].name}`);
+    });
+
+    // -----------------------------
+    // Refresh flow
+    // -----------------------------
+    async function refresh(){
+      const folder = folderSelect.value;
+      if (!folder) return;
+
+      btnRefresh.disabled = true;
+      debugEl.textContent += (debugEl.textContent ? "\n" : "") + "---- REFRESH ----\n";
+
+      const token = await getAccessToken();
+      const limit = Math.max(1, Math.min(1000, Number($("limit").value || 1000)));
+
+      const uwField = $("uwField").value.trim();
+      const rateField = $("rateTypeField").value.trim();
+
+      // Fields required for KPIs + breakdowns + drill-through
+      const fields = [
+        "Loan.LoanNumber",
+        "Loan.LoanAmount",
+        "Fields.317",
+        "Fields.19",
+        "Fields.Log.MS.CurrentMilestone",
+        "Fields.745",
+        "Fields.3142",
+        "Fields.748",
+        uwField,
+        rateField
+      ].filter(Boolean);
+
+      // Fetch raw loans
+      const raw = await fetchPipelineLoans({ token, folderName: folder, limit, fields });
+
+      // Normalize
+      const normalized = raw.map(normalizeLoan);
+
+      // Populate filter options (from normalized)
+      const uniq = (arr) => Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b)));
+
+      msLo.setOptions(uniq(normalized.map(l => l.lo)));
+      msPurpose.setOptions(uniq(normalized.map(l => l.purpose)));
+      msRateType.setOptions(uniq(normalized.map(l => l.rateType)));
+      msMilestone.setOptions(uniq(normalized.map(l => l.milestone)));
+
+      // Apply filters
+      const filtered = applyFilters(normalized);
+
+      state.loansRaw = normalized;
+      state.loansFiltered = filtered;
+
+      // Prior snapshot for trend
+      let prior = null;
+      try { prior = JSON.parse(localStorage.getItem(state.lastSnapshotKey) || "null"); } catch {}
+
+      // Compute KPIs
+      const k = computeKpis(filtered);
+
+      // Render KPIs + charts + lists
+      renderKpis(k, prior);
+      renderBreakdowns(k);
+
+      // Save snapshot for next time
+      localStorage.setItem(state.lastSnapshotKey, JSON.stringify({
+        totalUnits: k.totalUnits,
+        totalVol: k.totalVol,
+        avgAmt: k.avgAmt,
+        uniqueLOs: k.uniqueLOs,
+        appsMTD: k.appsMTD,
+        fundedMTD: k.fundedMTD,
+        pullThrough: k.pullThrough,
+        agedLoans: k.agedLoans,
+        avgAppToDisc: k.avgAppToDisc,
+        avgAppToUW: k.avgAppToUW,
+        avgAppToClose: k.avgAppToClose
+      }));
+
+      setLastRefresh();
+      btnRefresh.disabled = false;
+      log("Refresh complete ✅");
+    }
+
+    btnRefresh.addEventListener("click", () => {
+      refresh().catch(e => {
+        btnRefresh.disabled = false;
+        log("Refresh error:", e.message);
+      });
+    });
+
+    $("btnClearDebug").addEventListener("click", () => debugEl.textContent = "");
+
+    // -----------------------------
+    // Init
+    // -----------------------------
+    (async function init(){
+      try{
+        await loadFolders();
+      }catch(e){
         folderStatus.textContent = "Failed ❌";
-        log("INIT ERROR:", e.message);
+        log("Init error:", e.message);
       }
     })();
   </script>
