@@ -467,7 +467,6 @@
         </option>
         `).join("");
 
-    selectedLO = loSelect.value || "";
     loSelect.disabled = false;
     }
 
@@ -524,9 +523,12 @@
   // -------- V3 pipeline fetch helper --------
   async function fetchLoanPipeline(token, url, selectedFolderName, fields, filterObj) {
     const body = {
-      fields,
-      loanFolders: [ selectedFolderName ]
+    fields
     };
+
+    if (selectedFolderName && !selectedLO) {
+    body.loanFolders = [selectedFolderName];
+    }
 
     if (filterObj) body.filter = filterObj;
 
