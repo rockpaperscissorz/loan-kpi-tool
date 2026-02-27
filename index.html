@@ -3,50 +3,39 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Loan KPI Tool (Auth Troubleshooting)</title>
+  <title>Loan KPI Tool – Auth Test</title>
 
-  <!-- SSF guest library (required for Encompass Custom Tools) -->
+  <!-- SSF guest library -->
   <script src="https://cdn.elliemae.io/elliemae/core/ssf/1.0/elli.ssf.guest-with-polyfill.js"></script>
 
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px 14px; margin-top: 12px; }
-    .btn  { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
-    .muted { opacity: 0.75; font-size: 12px; }
-    code { background: #f7f7f7; padding: 2px 6px; border-radius: 6px; }
-    pre { background: #f7f7f7; padding: 10px; border-radius: 10px; overflow: auto; }
-    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    body { font-family: Arial, sans-serif; margin: 16px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 14px; margin-top: 12px; }
+    button { padding: 10px 14px; border-radius: 8px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    pre { background: #f7f7f7; padding: 10px; border-radius: 8px; overflow: auto; }
   </style>
 </head>
 
 <body>
-  <!-- PROOF OF LIFE -->
+  <!-- Proof of life -->
   <div class="card" style="border:4px dashed red;">
-    <div style="font-size:18px;font-weight:700;">PROOF OF LIFE</div>
-    <div class="muted">If you see this, your HTML is rendering from Vercel.</div>
-    <div class="muted">Rendered at: <span id="renderedAt">—</span></div>
+    <b>PROOF OF LIFE</b><br/>
+    Page rendered at: <span id="ts"></span>
   </div>
 
+  <!-- SSF status -->
   <div class="card">
-    <div><b>SSF status:</b> <span id="ssfStatus">Checking…</span></div>
-    <div class="muted" style="margin-top:6px;">
-      SSF should show <code>Loaded ✅</code> when running inside Encompass Custom Tools.
-    </div>
+    <b>SSF status:</b> <span id="ssfStatus">Checking…</span>
   </div>
 
+  <!-- Auth test -->
   <div class="card">
-    <div class="row">
-      <button id="btnAuth" class="btn">Get Auth Code</button>
-      <button id="btnClear" class="btn">Clear Debug</button>
-      <span><b>Auth status:</b> <span id="authStatus">Not started</span></span>
+    <button id="btnAuth">Get Auth Code</button>
+    <div style="margin-top:8px;">
+      <b>Auth status:</b> <span id="authStatus">Not started</span>
     </div>
 
-    <div class="muted" style="margin-top:10px;">
-      This requests an <b>auth code</b> using <code>elli.script.getObject('auth')</code> → <code>auth.getAccessToken()</code>.
-      We run it on a click (user gesture) and apply a timeout so hangs are visible.
-    </div>
-
-    <details style="margin-top:10px;" open>
+    <details open style="margin-top:10px;">
       <summary>Debug output</summary>
       <pre id="debug"></pre>
     </details>
@@ -54,81 +43,50 @@
 
   <script>
     // Timestamp
-    document.getElementById("renderedAt").textContent = new Date().toString();
+    document.getElementById("ts").textContent = new Date().toString();
 
-    const debugEl = document.getElementById("debug");
-    function logDebug(...args) {
-      const line = args.map(a => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
-      debugEl.textContent += (debugEl.textContent ? "\n" : "") + line;
+    const debug = document.getElementById("debug");
+    function log(msg) {
+      debug.textContent += (debug.textContent ? "\n" : "") + msg;
     }
 
     // SSF check
-    const ssfOk = (window.elli && elli.script);
-    document.getElementById("ssfStatus").textContent = ssfOk ? "Loaded ✅" : "NOT loaded ❌";
-
-    // Timeout helper so a hang becomes a clear failure
-    function withTimeout(promise, ms = 12000) {
-      return Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timed out waiting for auth code")), ms))
-      ]);
-    }
-
-    document.getElementById("btnClear").addEventListener("click", () => {
-      debugEl.textContent = "";
-      document.getElementById("authStatus").textContent = "Not started";
-    });
+    const ssfLoaded = (window.elli && elli.script);
+    document.getElementById("ssfStatus").textContent = ssfLoaded ? "Loaded ✅" : "NOT loaded ❌";
 
     document.getElementById("btnAuth").addEventListener("click", async () => {
-      if (!ssfOk) {
+      if (!ssfLoaded) {
         document.getElementById("authStatus").textContent = "SSF not loaded ❌";
-        logDebug("SSF not loaded. Ensure this is running inside Encompass Custom Tools and the SSF script is reachable.");
+        log("SSF not loaded – cannot request auth.");
         return;
       }
 
       try {
-        document.getElementById("authStatus").textContent = "Getting auth code…";
-        logDebug("Requesting auth object…");
+        document.getElementById("authStatus").textContent = "Requesting auth object…";
+        log("Calling elli.script.getObject('auth')…");
 
-        const auth = await elli.script.getObject("auth");
-        logDebug("Auth object acquired. Calling getAccessToken()…");
+        // EXACT pattern you asked for
+        var auth = await elli.script.getObject("auth");
+        log("Auth object acquired ✅");
 
-        // Per ICE SSF docs: getAccessToken() returns an OAuth2 auth code (string) to be exchanged for an API access token.
-        const authCode = await withTimeout(auth.getAccessToken(), 12000);
+        document.getElementById("authStatus").textContent = "Requesting auth code…";
+        log("Calling auth.getAccessToken()…");
 
-        const authCodeStr = String(authCode || "");
-        logDebug("Auth code returned (length):", String(authCodeStr.length));
-        logDebug("Auth code preview (first 20 chars):", authCodeStr.slice(0, 20) + (authCodeStr.length > 20 ? "…" : ""));
+        var authCode = await auth.getAccessToken();
+        log("Auth code returned:");
+        log(String(authCode).slice(0, 40) + "…");
 
-        if (authCodeStr.length > 0) {
-          document.getElementById("authStatus").textContent = "Auth code OK ✅ (ready to exchange)";
-        } else {
-          document.getElementById("authStatus").textContent = "Auth code missing ❌ (unexpected payload)";
-          logDebug("Unexpected authCode value:", authCode);
-        }
+        document.getElementById("authStatus").textContent = "Auth code OK ✅";
+
+        // NOTE:
+        // This authCode is what you would exchange server-side
+        // using your LO Connect Client ID / secret.
       } catch (e) {
         console.error(e);
-        document.getElementById("authStatus").textContent = `Auth failed ❌ (${e.message})`;
-        logDebug("ERROR:", e.message);
-        logDebug("Tip: If this times out/hangs, check browser third-party cookie/tracking settings and ensure you're testing inside Encompass (not a standalone tab).");
+        document.getElementById("authStatus").textContent = "Auth failed ❌";
+        log("ERROR: " + e.message);
       }
     });
   </script>
-  <button id="btnLoan">Test Loan Object</button>
-<span id="loanStatus">—</span>
-
-<script>
-document.getElementById("btnLoan").addEventListener("click", async () => {
-  try {
-    document.getElementById("loanStatus").textContent = "Requesting loan…";
-    const loanObj = await elli.script.getObject("loan");
-    document.getElementById("loanStatus").textContent = "Loan object OK ✅";
-    console.log("Loan object:", loanObj);
-  } catch (e) {
-    document.getElementById("loanStatus").textContent = "Loan failed ❌";
-    console.error(e);
-  }
-});
-</script>
 </body>
 </html>
