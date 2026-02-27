@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pipeline KPIs</title>
+
+  <!-- SSF guest library (required for Custom Tools) -->
+  <script src="https://cdn.elliemae.io/elliemae/core/ssf/1.0/elli.ssf.guest-with-polyfill.js"></script>
+
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 16px; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; }
+    .card { border:1px solid #ddd; border-radius:12px; padding:12px 14px; min-width:220px; }
+    .label { font-size:12px; opacity:.7; }
+    .value { font-size:22px; font-weight:700; margin-top:6px; }
+    button { padding:10px 12px; border-radius:10px; border:1px solid #ccc; background:white; cursor:pointer; }
+    pre { background:#f7f7f7; padding:10px; border-radius:10px; overflow:auto; }
+  </style>
+</head>
+<body>
+    <div style="padding:16px;border:4px dashed red;font-size:18px;">
+  PROOF OF LIFE: If you see this, HTML is rendering.
+    </div>
+  <h2>Pipeline KPIs (Minimal)</h2>
+
+  <div class="row">
+    <div class="card"><div class="label">Loans returned</div><div id="kpiCount" class="value">—</div></div>
+    <div class="card"><div class="label">Total loan amount (sum)</div><div id="kpiSum" class="value">—</div></div>
+    <div class="card"><div class="label">By milestone (top)</div><div id="kpiMilestones" class="value">—</div></div>
+  </div>
+
+  <p>
+    <button id="btnRefresh">Refresh</button>
+  </p>
+
+  <div id="status"></div>
+  <pre id="debug" style="display:none"></pre>
+
+  <script>
+    const money = (n) =>
+      (n === null || n === undefined || Number.isNaN(n)) ? "—" :
+      new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 }).format(n);
+
+    async function getUserAccessToken() {
+      const auth = await elli.script.getObject('auth');
+      const { access_token, host_name, token_type } = await auth.getAccessToken();
+      return { access_token, host_name, token_type };
+    }
+
+    async function pipelineSearch({ accessToken }) {
+      // NOTE: Per API docs, request must include either filter or loanGuids (not both). We'll use a simple filter. :contentReference[oaicite:3]{index=3}
+      // Minimal: return only the fields we need for KPIs.
+      //
+      // IMPORTANT: field IDs / canonical names vary by what you request.
+      // "fields" supports canonical names in many examples; if your instance requires field IDs, swap accordingly.
+      // Start with common canonicals and adjust as needed.
+
+      const url = "https://api.elliemae.com/encompass/v1/loanPipeline?limit=100";
+
+      const body = {
+        // A very broad filter: "Loan.LoanNumber" exists (most environments). We just include all by using Include=true and an empty-ish operator.
+        // If your API rejects this, replace with a real filter like milestone or folder.
+        filter: {
+          terms: [{
+            canonicalName: "Loan.LoanNumber",
+            value: "",
+            matchType: "StartsWith",
+            include: true
+          }]
+        },
+        // Fields to return for each loan row
+        fields: [
+          "Loan.LoanAmount",
+          "Loan.MilestoneName"
+        ]
+      };
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`Pipeline API error ${resp.status}: ${txt}`);
+      }
+
+      return resp.json();
+    }
+
+    function computeKpis(pipelineResponse) {
+      // Typical response contains a list of "loans" (or similar). If your payload differs, inspect debug output.
+      const loans = pipelineResponse?.loans || pipelineResponse?.items || [];
+
+      const count = loans.length;
+
+      let sum = 0;
+      const milestoneCounts = new Map();
+
+      for (const row of loans) {
+        const amt = Number(row?.fields?.["Loan.LoanAmount"] ?? row?.["Loan.LoanAmount"] ?? 0);
+        if (!Number.isNaN(amt)) sum += amt;
+
+        const ms = String(row?.fields?.["Loan.MilestoneName"] ?? row?.["Loan.MilestoneName"] ?? "Unknown");
+        milestoneCounts.set(ms, (milestoneCounts.get(ms) || 0) + 1);
+      }
+
+      const topMilestones = [...milestoneCounts.entries()]
+        .sort((a,b) => b[1]-a[1])
+        .slice(0, 3)
+        .map(([k,v]) => `${k}: ${v}`)
+        .join(" | ");
+
+      return { count, sum, topMilestones, rawLoansCount: loans.length };
+    }
+
+    async function refresh() {
+      document.getElementById("status").textContent = "Refreshing…";
+      try {
+        const { access_token } = await getUserAccessToken(); // returns access token for invoking Developer Connect APIs :contentReference[oaicite:4]{index=4}
+
+        const data = await pipelineSearch({ accessToken: access_token }); // calls POST /encompass/v1/loanPipeline :contentReference[oaicite:5]{index=5}
+
+        const kpis = computeKpis(data);
+
+        document.getElementById("kpiCount").textContent = String(kpis.count);
+        document.getElementById("kpiSum").textContent = money(kpis.sum);
+        document.getElementById("kpiMilestones").textContent = kpis.topMilestones || "—";
+
+        document.getElementById("status").textContent =
+          `Last refreshed: ${new Date().toLocaleTimeString()}`;
+
+        // If it fails, flip debug to true and view payload shape
+        // document.getElementById("debug").style.display = "block";
+        // document.getElementById("debug").textContent = JSON.stringify(data, null, 2);
+
+      } catch (e) {
+        console.error(e);
+        document.getElementById("status").textContent = `Error: ${e.message}`;
+      }
+    }
+
+    document.getElementById("btnRefresh").addEventListener("click", refresh);
+    refresh();
+  </script>
+</body>
+</html>
