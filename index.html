@@ -105,10 +105,11 @@
       <div class="card">
         <div class="kpi-label">Filter Mode</div>
         <div class="row" style="margin-top:6px;">
-          <select id="pipeMode" class="input">
-            <option value="myLoans" selected>My Loans (Loan Officer = current user)</option>
-            <option value="folder">Folder</option>
-          </select>
+        <select id="pipeMode" class="input">
+        <option value="all">ALL Loans (diagnostic)</option>
+        <option value="myLoans">My Loans (Loan Officer)</option>
+        <option value="folder">Folder</option>
+        </select>
 
           <div class="field" style="min-width:260px;">
             <label class="muted" for="pipeFolder">Folder name (exact)</label>
@@ -333,32 +334,46 @@
     }
 
     function buildPipelineFilter() {
-      const mode = document.getElementById("pipeMode").value;
-      const folder = String(document.getElementById("pipeFolder").value || "").trim();
+    const mode = document.getElementById("pipeMode").value;
 
-      if (mode === "folder") {
-        if (!folder) throw new Error("Folder mode selected, but folder name is blank.");
+    // STEP A: force a known-good filter that should always match
+    if (mode === "all") {
         return {
-          operator: "and",
-          terms: [{
+        operator: "and",
+        terms: [{
+            canonicalName: "Loan.LoanNumber",
+            matchType: "isNotEmpty",
+            include: true
+        }]
+        };
+    }
+
+    // Existing Folder mode (unchanged)
+    if (mode === "folder") {
+        const folder = String(document.getElementById("pipeFolder").value || "").trim();
+        if (!folder) throw new Error("Folder mode selected, but folder name is blank.");
+
+        return {
+        operator: "and",
+        terms: [{
             canonicalName: "Loan.LoanFolder",
             value: folder,
             matchType: "exact",
             include: true
-          }]
+        }]
         };
-      }
+    }
 
-      // Default: myLoans
-      return {
+    // Existing My Loans mode (left intact for now)
+    return {
         operator: "and",
         terms: [{
-          canonicalName: "Loan.LoanOfficer.UserId",
-          value: "",              // current user
-          matchType: "exact",
-          include: true
+        canonicalName: "Loan.LoanOfficer.UserId",
+        value: "",
+        matchType: "exact",
+        include: true
         }]
-      };
+    };
     }
 
     async function refreshPipelineKpis() {
