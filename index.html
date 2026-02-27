@@ -895,6 +895,7 @@
     // NOTE: We cannot confirm syntax in your tenant from here. If blank, validate field names and update these constants.
     const MS_DATE_LOAN_APP = "Fields.Log.MS.Date.Loan App";
     const MS_DATE_PROCESSING = "Fields.Log.MS.Date.Processing";
+    const MS_DATE_APPROVAL = "Fields.Log.MS.Date.Approval";
     $("msFieldLoanApp").textContent = MS_DATE_LOAN_APP;
     $("msFieldProcessing").textContent = MS_DATE_PROCESSING;
 
@@ -939,6 +940,7 @@
         startedDate,
         msLoanAppDate,
         msProcessingDate,
+        msApprovalDate,
         _raw: loan
       };
     }
@@ -1364,137 +1366,134 @@
 
     // -----------------------------
     // Refresh flow
-    // -----------------------------
     async function refresh(){
       const folders = msFolders.getSelected();
       if (!folders.length) return;
 
       btnRefresh.disabled = true;
-      debugEl.textContent += (debugEl.textContent ? "\n" : "") + "---- REFRESH ----\n";
 
-      const token = await getAccessToken();
-      const limit = Math.max(1, Math.min(1000, Number($("limit").value || 1000)));
+      try {
+        debugEl.textContent += (debugEl.textContent ? "\n" : "") + "---- REFRESH ----\n";
 
-      const uwField = "Fields.2301";
-      const rateField = "Fields.1172";
+        const token = await getAccessToken();
+        const limit = Math.max(1, Math.min(1000, Number($("limit").value || 1000)));
 
-      // Fields needed for:
-      // - existing KPIs
-      // - Amortization filter (608)
-      // - milestone turn times chart (MS_DATE_LOAN_APP / MS_DATE_PROCESSING)
-      const fields = [
-        "Loan.LoanNumber",
-        "Loan.LoanAmount",
-        "Fields.317",
-        "Fields.608",
-        "Fields.19",
-        "Fields.Log.MS.CurrentMilestone",
-        "Fields.Log.MS.Date.Started",
-        "Fields.745",
-        "Fields.3142",
-        "Fields.748",
-        "Fields.2301",
-        "Fields.1172",
+        // Fields needed for:
+        // - existing KPIs
+        // - Amortization filter (608)
+        // - milestone turn times chart (MS_DATE_LOAN_APP / MS_DATE_PROCESSING / MS_DATE_APPROVAL)
+        const fields = [
+          "Loan.LoanNumber",
+          "Loan.LoanAmount",
+          "Fields.317",
+          "Fields.608",
+          "Fields.19",
+          "Fields.Log.MS.CurrentMilestone",
+          "Fields.Log.MS.Date.Started",
+          "Fields.745",
+          "Fields.3142",
+          "Fields.748",
+          "Fields.2301",
+          "Fields.1172",
 
-        // milestone canonical fields
-        MS_DATE_LOAN_APP,
-        MS_DATE_PROCESSING,
-        MS_DATE_APPROVAL
-      ].filter(f => !canonicalFieldSet.size || canonicalFieldSet.has(f)); // if set is loaded, validate
+          // milestone canonical fields
+          MS_DATE_LOAN_APP,
+          MS_DATE_PROCESSING,
+          MS_DATE_APPROVAL
+        ].filter(f => !canonicalFieldSet.size || canonicalFieldSet.has(f)); // if set is loaded, validate
 
-      const raw = await fetchPipelineLoans({ token, folderNames: folders, limit, fields });
-      // 🔍 DEBUG: inspect pipeline-returned field keys + values
-      if (raw?.length && raw[0]?.fields) {
-        log("---- RAW PIPELINE FIELD KEYS (sample loan) ----");
-        log(Object.keys(raw[0].fields).slice(0, 80));
+        const raw = await fetchPipelineLoans({ token, folderNames: folders, limit, fields });
 
-        log("---- RAW MILESTONE FIELD VALUES (sample loan) ----");
-        log({
-          started: raw[0].fields["Fields.Log.MS.Date.Started"],
-          loanApp: raw[0].fields["Fields.Log.MS.Date.Loan App"],
-          processing: raw[0].fields["Fields.Log.MS.Date.Processing"],
-          approval: raw[0].fields["Fields.Log.MS.Date.Approval"]
+        // 🔍 DEBUG: inspect pipeline-returned field keys + values
+        if (raw?.length && raw[0]?.fields) {
+          log("---- RAW PIPELINE FIELD KEYS (sample loan) ----");
+          log(Object.keys(raw[0].fields).slice(0, 80));
+
+          log("---- RAW MILESTONE FIELD VALUES (sample loan) ----");
+          log({
+            started: raw[0].fields["Fields.Log.MS.Date.Started"],
+            loanApp: raw[0].fields["Fields.Log.MS.Date.Loan App"],
+            processing: raw[0].fields["Fields.Log.MS.Date.Processing"],
+            approval: raw[0].fields["Fields.Log.MS.Date.Approval"]
+          });
+        }
+
+        const normalized = raw.map(normalizeLoan);
+
+        const uniq = (arr) => Array.from(new Set(arr.filter(Boolean)))
+          .sort((a,b)=>String(a).localeCompare(String(b)));
+
+        // IMPORTANT:
+        // - Loan Officers are NOT populated from pipeline anymore.
+        // - msLo options come from /company/users (loadLoanOfficers)
+        // - So here we only populate other filters from current data.
+        msAmort.setOptions(uniq(normalized.map(l => l.amortType)));
+        msPurpose.setOptions(uniq(normalized.map(l => l.purpose)));
+        msRateType.setOptions(uniq(normalized.map(l => l.loanType)));
+        msMilestone.setOptions(uniq(normalized.map(l => l.milestone)));
+
+        const filtered = applyFilters(normalized);
+
+        log("---- Milestone Date Debug (KPI Loans Only) ----");
+        filtered.forEach(l => {
+          log({
+            loanNumber: l.loanNumber,
+            loanOfficer: l.lo,
+
+            // Field 745
+            appDate_745: l.appDate ? l.appDate.toLocaleDateString() : null,
+
+            // Milestone: Started
+            milestoneStarted: l.startedDate ? l.startedDate.toLocaleDateString() : null,
+
+            // Milestone: Loan App
+            milestoneLoanApp: l.msLoanAppDate ? l.msLoanAppDate.toLocaleDateString() : null,
+
+            // Milestone: Processing
+            milestoneProcessing: l.msProcessingDate ? l.msProcessingDate.toLocaleDateString() : null
+          });
         });
+
+        state.loansRaw = normalized;
+        state.loansFiltered = filtered;
+
+        let prior = null;
+        try { prior = JSON.parse(localStorage.getItem(state.lastSnapshotKey) || "null"); } catch {}
+
+        const k = computeKpis(filtered);
+
+        renderKpis(k, prior);
+        renderBreakdowns(k);
+
+        localStorage.setItem(state.lastSnapshotKey, JSON.stringify({
+          totalUnits: k.totalUnits,
+          totalVol: k.totalVol,
+          avgAmt: k.avgAmt,
+          uniqueLOs: k.uniqueLOs,
+          appsMTD: k.appsMTD,
+          fundedMTD: k.fundedMTD,
+          pullThrough: k.pullThrough,
+          agedLoans: k.agedLoans,
+          avgAppToDisc: k.avgAppToDisc,
+          avgAppToUW: k.avgAppToUW,
+          avgAppToClose: k.avgAppToClose
+        }));
+
+        setLastRefresh();
+        log("Refresh complete ✅");
+
+      } catch (e) {
+        log("Refresh error:", e?.message || String(e));
+        throw e;
+      } finally {
+        // Always restore state (and keep it disabled if no folders selected)
+        btnRefresh.disabled = (msFolders.getSelected().length === 0);
       }
-      const normalized = raw.map(normalizeLoan);
-
-      const uniq = (arr) => Array.from(new Set(arr.filter(Boolean)))
-        .sort((a,b)=>String(a).localeCompare(String(b)));
-
-      // IMPORTANT:
-      // - Loan Officers are NOT populated from pipeline anymore.
-      // - msLo options come from /company/users (loadLoanOfficers)
-      // - So here we only populate other filters from current data.
-      msAmort.setOptions(uniq(normalized.map(l => l.amortType)));
-      msPurpose.setOptions(uniq(normalized.map(l => l.purpose)));
-      msRateType.setOptions(uniq(normalized.map(l => l.loanType)));
-      msMilestone.setOptions(uniq(normalized.map(l => l.milestone)));
-
-      const filtered = applyFilters(normalized);
-
-      log("---- Milestone Date Debug (KPI Loans Only) ----");
-
-      filtered.forEach(l => {
-        log({
-          loanNumber: l.loanNumber,
-          loanOfficer: l.lo,
-
-          // Field 745
-          appDate_745: l.appDate
-            ? l.appDate.toLocaleDateString()
-            : null,
-
-          // Milestone: Started
-          milestoneStarted: l.startedDate
-            ? l.startedDate.toLocaleDateString()
-            : null,
-
-          // Milestone: Loan App
-          milestoneLoanApp: l.msLoanAppDate
-            ? l.msLoanAppDate.toLocaleDateString()
-            : null,
-
-          // Milestone: Processing
-          milestoneProcessing: l.msProcessingDate
-            ? l.msProcessingDate.toLocaleDateString()
-            : null
-        });
-      });
-      state.loansRaw = normalized;
-      state.loansFiltered = filtered;
-
-      let prior = null;
-      try { prior = JSON.parse(localStorage.getItem(state.lastSnapshotKey) || "null"); } catch {}
-
-      const k = computeKpis(filtered);
-
-      renderKpis(k, prior);
-      renderBreakdowns(k);
-
-      localStorage.setItem(state.lastSnapshotKey, JSON.stringify({
-        totalUnits: k.totalUnits,
-        totalVol: k.totalVol,
-        avgAmt: k.avgAmt,
-        uniqueLOs: k.uniqueLOs,
-        appsMTD: k.appsMTD,
-        fundedMTD: k.fundedMTD,
-        pullThrough: k.pullThrough,
-        agedLoans: k.agedLoans,
-        avgAppToDisc: k.avgAppToDisc,
-        avgAppToUW: k.avgAppToUW,
-        avgAppToClose: k.avgAppToClose
-      }));
-
-      setLastRefresh();
-      btnRefresh.disabled = false;
-      log("Refresh complete ✅");
     }
 
+    // Keep your click handler, but you can simplify it now that refresh() always restores the button state.
     btnRefresh.addEventListener("click", () => {
-      refresh().catch(e => {
-        btnRefresh.disabled = false;
-        log("Refresh error:", e.message);
-      });
+      refresh().catch(e => log("Refresh error:", e?.message || String(e)));
     });
 
     $("btnClearDebug").addEventListener("click", () => debugEl.textContent = "");
