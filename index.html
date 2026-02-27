@@ -152,7 +152,7 @@
         <label class="muted">Aging threshold (days)</label>
         <input id="ageDays" class="input" type="number" min="1" max="365" value="45" />
       </div>
-
+      </div>
 
     <div class="divider"></div>
 
@@ -1362,7 +1362,7 @@
       msMilestone.setOptions(uniq(normalized.map(l => l.milestone)));
 
       const filtered = applyFilters(normalized);
-      
+
       log("---- Milestone Started Date (KPI Loans Only) ----");
 
       filtered.forEach(l => {
