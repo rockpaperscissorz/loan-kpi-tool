@@ -665,7 +665,55 @@
       const personas = Array.isArray(u?.personas) ? u.personas : [];
       return personas.some(p => String(p?.entityName || "").toLowerCase() === "loan officer");
     }
+      let canonicalFieldSet = new Set(); // holds canonicalName strings
 
+      function extractCanonicalFields(payload){
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload?.items)) return payload.items;
+        if (Array.isArray(payload?.canonicalFields)) return payload.canonicalFields;
+        return [];
+      }
+
+      async function loadPipelineCanonicalFields(){
+        const token = await getAccessToken();
+        const url = `${API_SERVER}/encompass/v3/loanPipeline/canonicalFields`;
+
+        log("GET pipeline canonicalFields:", url);
+
+        const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        const text = await r.text();
+
+        if (!r.ok){
+          log("canonicalFields error status:", r.status);
+          log("canonicalFields error body:", text.slice(0, 2000));
+          throw new Error(`canonicalFields failed (${r.status})`);
+        }
+
+        let json;
+        try { json = JSON.parse(text); } catch { throw new Error("canonicalFields returned non-JSON"); }
+
+        const items = extractCanonicalFields(json);
+
+        canonicalFieldSet = new Set(
+          items
+            .map(x => String(x?.canonicalName || "").trim())
+            .filter(Boolean)
+        );
+
+        log("canonicalFields loaded:", canonicalFieldSet.size);
+
+        // Validate your milestone fields exist
+        const mustHave = [
+          "Fields.Log.MS.Date.Started",
+          "Fields.Log.MS.Date.Loan App",
+          "Fields.Log.MS.Date.Processing",
+          "Fields.Log.MS.Date.Approval"
+        ];
+
+        mustHave.forEach(f => {
+          log(`canonicalFields contains ${f}?`, canonicalFieldSet.has(f));
+        });
+      }
     async function loadLoanOfficers(){
       loStatus.textContent = "Loading…";
 
@@ -870,14 +918,9 @@
         getField(loan, "Fields.Log.MS.Date.Started")
       );
 
-      const msLoanAppDate = parseDate(
-        getField(loan, "Log.MS.Date.Loan App")
-      );
-
-      const msProcessingDate = parseDate(
-        getField(loan, "Log.MS.Date.Processing")
-      );
-
+      const msLoanAppDate = parseDate(getField(loan, MS_DATE_LOAN_APP));
+      const msProcessingDate = parseDate(getField(loan, MS_DATE_PROCESSING));
+      const msApprovalDate = parseDate(getField(loan, MS_DATE_APPROVAL));
       const rateBucket = classifyRateBucket(loanType, purpose);
 
       return {
@@ -1350,13 +1393,29 @@
         "Fields.745",
         "Fields.3142",
         "Fields.748",
-        uwField,
-        rateField,
+        "Fields.2301",
+        "Fields.1172",
+
+        // milestone canonical fields
         MS_DATE_LOAN_APP,
-        MS_DATE_PROCESSING
-      ].filter(Boolean);
+        MS_DATE_PROCESSING,
+        MS_DATE_APPROVAL
+      ].filter(f => !canonicalFieldSet.size || canonicalFieldSet.has(f)); // if set is loaded, validate
 
       const raw = await fetchPipelineLoans({ token, folderNames: folders, limit, fields });
+      // 🔍 DEBUG: inspect pipeline-returned field keys + values
+      if (raw?.length && raw[0]?.fields) {
+        log("---- RAW PIPELINE FIELD KEYS (sample loan) ----");
+        log(Object.keys(raw[0].fields).slice(0, 80));
+
+        log("---- RAW MILESTONE FIELD VALUES (sample loan) ----");
+        log({
+          started: raw[0].fields["Fields.Log.MS.Date.Started"],
+          loanApp: raw[0].fields["Fields.Log.MS.Date.Loan App"],
+          processing: raw[0].fields["Fields.Log.MS.Date.Processing"],
+          approval: raw[0].fields["Fields.Log.MS.Date.Approval"]
+        });
+      }
       const normalized = raw.map(normalizeLoan);
 
       const uniq = (arr) => Array.from(new Set(arr.filter(Boolean)))
@@ -1448,7 +1507,9 @@
         await loadFolders();
         await loadLoanOfficers();
 
-        // initial refresh if Pipeline auto-selected
+        // NEW: load canonicalFields so we can validate field strings
+        await loadPipelineCanonicalFields();
+
         if (msFolders.getSelected().length){
           refresh().catch(e => log("Auto refresh error:", e.message));
         }
