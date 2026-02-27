@@ -27,7 +27,7 @@
     .input, select {
       padding: 10px 12px; border-radius: 12px; border: 1px solid #d8d8d8; background:#fff;
       font-size: 14px;
-      min-width: 220px;
+      min-width: 260px;
     }
 
     /* Layout helpers */
@@ -57,7 +57,7 @@
     <h2>Pipeline KPI Dashboard</h2>
     <div class="muted">
       Folder list from V3 (<code>/encompass/v3/loanFolders</code>). KPIs from V3 (<code>/encompass/v3/loanPipeline</code>).
-      Includes <b>every loan in the selected folder</b> with optional filters for Loan Officer and State.
+      Includes <b>every loan in the selected folder</b> with no other conditions.
     </div>
 
     <div class="bar">
@@ -84,31 +84,9 @@
         </select>
       </div>
 
-      <div class="field">
-        <label class="muted" for="loSelect">Loan Officer</label>
-        <select id="loSelect" class="input" disabled>
-          <option value="">All LOs</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label class="muted" for="stateSelect">State</label>
-        <select id="stateSelect" class="input">
-          <option value="">All States</option>
-          <option value="CT">CT</option>
-          <option value="MA">MA</option>
-          <option value="RI">RI</option>
-          <option value="VT">VT</option>
-          <option value="NY">NY</option>
-          <option value="NJ">NJ</option>
-          <option value="OH">OH</option>
-          <option value="PA">PA</option>
-        </select>
-      </div>
-
-      <div class="field" style="min-width:140px;">
+      <div class="field" style="min-width:160px;">
         <label class="muted" for="pipeLimit">Limit</label>
-        <input id="pipeLimit" class="input" type="number" min="1" max="1000" value="1000" style="min-width:140px;" />
+        <input id="pipeLimit" class="input" type="number" min="1" max="1000" value="1000" style="min-width:160px;" />
       </div>
 
       <div class="field" style="min-width:240px;">
@@ -141,7 +119,7 @@
     <div class="card span-3">
       <div class="kpi-label">Unique LOs</div>
       <div class="kpi-value" id="kpiLoCount">—</div>
-      <div class="kpi-sub">Distinct Loan Officers</div>
+      <div class="kpi-sub">Distinct <code>Fields.317</code></div>
     </div>
 
     <!-- Charts -->
@@ -154,7 +132,7 @@
     <div class="card span-6">
       <div class="kpi-label">Loans by Loan Officer</div>
       <canvas id="loChart" height="180"></canvas>
-      <div class="kpi-sub">Grouped by <code>Fields.1612</code> (label includes LO total volume)</div>
+      <div class="kpi-sub">Grouped by <code>Fields.317</code> (label includes LO total volume)</div>
     </div>
 
     <div class="card span-12">
@@ -269,18 +247,11 @@
 
     // ---------- Folder dropdown ----------
     const folderSelect = document.getElementById("folderSelect");
-    const loSelect = document.getElementById("loSelect");
-    const stateSelect = document.getElementById("stateSelect");
-    const pipeLimit = document.getElementById("pipeLimit");
     const folderStatus = document.getElementById("folderStatus");
     const resolvedFolderNameEl = document.getElementById("resolvedFolderName");
     const btnPipeline = document.getElementById("btnPipeline");
 
     let selectedFolderName = null;
-    let selectedLO = "";
-    let selectedState = "";
-    let loDropdownInitialized = false;
-
 
     function extractFolderList(json) {
       if (Array.isArray(json)) return json;
@@ -330,7 +301,6 @@
       if (pipeline) {
         folderSelect.value = pipeline;
         onFolderChanged();
-        
       }
     }
 
@@ -341,62 +311,31 @@
       ctx.clearRect(0, 0, c.width, c.height);
     }
 
-    function escapeHtml(s) {
-      return String(s ?? "")
-        .replace(/&/g,"&amp;")
-        .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;")
-        .replace(/"/g,"&quot;")
-        .replace(/'/g,"&#039;");
-    }
-
     function onFolderChanged() {
-    selectedFolderName = folderSelect.value || null;
-    resolvedFolderNameEl.textContent = selectedFolderName || "—";
-    btnPipeline.disabled = !selectedFolderName;
+      selectedFolderName = folderSelect.value || null;
+      resolvedFolderNameEl.textContent = selectedFolderName || "—";
+      btnPipeline.disabled = !selectedFolderName;
 
-    // Reset filters
-    selectedLO = "";
-    selectedState = "";
-    loDropdownInitialized = false;
+      // Clear headline KPIs
+      document.getElementById("kpiLoans").textContent = "—";
+      document.getElementById("kpiTotalVol").textContent = "—";
+      document.getElementById("kpiAvg").textContent = "—";
+      document.getElementById("kpiLoCount").textContent = "—";
 
-    if (loSelect) {
-        loSelect.innerHTML = `<option value="">All LOs</option>`;
-        loSelect.disabled = true;
-    }
-    if (stateSelect) stateSelect.value = "";
+      // Clear lists
+      document.getElementById("milestoneDurationList").textContent = "—";
+      document.getElementById("loList").textContent = "—";
 
-    // Clear headline KPIs
-    document.getElementById("kpiLoans").textContent = "—";
-    document.getElementById("kpiTotalVol").textContent = "—";
-    document.getElementById("kpiAvg").textContent = "—";
-    document.getElementById("kpiLoCount").textContent = "—";
+      // Clear charts
+      clearCanvas("milestoneChart");
+      clearCanvas("loChart");
+      clearCanvas("purposeChart");
 
-    // Clear lists
-    document.getElementById("milestoneDurationList").textContent = "—";
-    document.getElementById("loList").textContent = "—";
-
-    // Clear charts
-    clearCanvas("milestoneChart");
-    clearCanvas("loChart");
-    clearCanvas("purposeChart");
-
-    log("Folder selected:", selectedFolderName || "(none)");
+      log("Folder selected:", selectedFolderName || "(none)");
     }
 
     folderSelect.addEventListener("change", onFolderChanged);
 
-    loSelect.addEventListener("change", () => {
-    selectedLO = loSelect.value || ""; // USER ID ONLY
-    log("LO filter changed (UserId):", selectedLO || "(All)");
-    refreshPipelineKpis();
-    });
-
-    stateSelect.addEventListener("change", () => {
-    selectedState = stateSelect.value || "";
-    log("State filter changed:", selectedState || "(All)");
-    refreshPipelineKpis(); // ✅ required
-    });
     // ---------- Response helpers ----------
     function summarizeJsonShape(json) {
       const keys = json && typeof json === "object" ? Object.keys(json) : [];
@@ -422,6 +361,15 @@
 
     function sortedEntries(obj) {
       return Object.entries(obj).sort((a,b) => b[1] - a[1]);
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? "")
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
     }
 
     function renderTopListWithVolume(containerId, entries, volByKey, topN=10) {
@@ -454,20 +402,6 @@
           <div class="right kpi-mini">${isFinite(r.avgDays) ? r.avgDays.toFixed(1) : "—"} d</div>
         </div>
       `).join("");
-    }
-
-    function rebuildLODropdownFromLoans(loMap) {
-    const current = selectedLO || "";
-
-    loSelect.innerHTML =
-        `<option value="">All LOs</option>` +
-        Object.entries(loMap).map(([userId, data]) => `
-        <option value="${userId}" ${userId === current ? "selected" : ""}>
-            ${escapeHtml(data.name)}
-        </option>
-        `).join("");
-
-    loSelect.disabled = false;
     }
 
     // ---------- Simple bar chart renderer ----------
@@ -520,215 +454,222 @@
       });
     }
 
-  // -------- V3 pipeline fetch helper --------
-  async function fetchLoanPipeline(token, url, selectedFolderName, fields, filterObj) {
-    const body = {
-    fields
-    };
-
-    if (selectedFolderName && !selectedLO) {
-    body.loanFolders = [selectedFolderName];
-    }
-
-    if (filterObj) body.filter = filterObj;
-
-    log("V3 loanPipeline request URL:", url);
-    log("V3 loanPipeline request body:", body);
-
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
-
-    const text = await resp.text();
-    log("V3 response status:", String(resp.status));
-
-    if (!resp.ok) {
-      log("V3 ERROR body:", text);
-      throw new Error(`v3 loanPipeline ${resp.status}`);
-    }
-
-    const json = JSON.parse(text);
-    const loans = pickFirstArray(json);
-    log("V3 detected loans array length:", loans.length);
-
-    return loans;
-  }
-
-function buildFilterObject() {
-  const terms = [];
-
-  if (selectedLO) {
-    terms.push({
-      canonicalName: "Loan.LoanOfficer.UserId",
-      value: selectedLO,
-      matchType: "exact",
-      include: true
-    });
-  }
-
-  if (selectedState) {
-    terms.push({
-      canonicalName: "Fields.12", // ✅ correct for V3
-      value: selectedState,
-      matchType: "exact",
-      include: true
-    });
-  }
-
-  if (!terms.length) return null;
-  return { operator: "and", terms };
-}
-
-  // -------- V3 pipeline KPIs --------
-  // -------- V3 pipeline KPIs --------
-  async function refreshPipelineKpis() {
-    if (!selectedFolderName) return;
-
-    const token = await getUserAccessTokenForApi();
-    const limit = Math.max(
-      1,
-      Math.min(1000, Number(pipeLimit.value || 1000))
-    );
-
-    const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
-    const filterObj = buildFilterObject();
-
-    log("Refreshing KPIs", {
-      folder: selectedFolderName,
-      lo: selectedLO || "(All)",
-      state: selectedState || "(All)"
-    });
-
-    const coreFields = [
-      "Loan.LoanAmount",
-      "Loan.LoanNumber",
-      "Fields.Log.MS.CurrentMilestone",
-      "Fields.19",
-      "Fields.1612", // LO Full Name (display)
-      "Fields.317",  // LO User ID (identity)
-      "Fields.12"    // State
-    ];
-
-    const loans = await fetchLoanPipeline(
-      token,
-      url,
-      selectedFolderName,
-      coreFields,
-      filterObj
-    );
-
-    let total = 0;
-    const byMilestone = {};
-    const byPurpose = {};
-    const byLO = {};
-    const volByLO = {};
-
-    // -------------------------------
-    // MAIN LOAN LOOP
-    // -------------------------------
-    for (const l of loans) {
-      const amt = Number(
-        String(
-          l?.fields?.["Loan.LoanAmount"] ??
-          l?.LoanAmount ??
-          0
-        ).replace(/,/g, "")
-      );
-
-      if (isFinite(amt)) total += amt;
-
-      const ms =
-        l?.fields?.["Fields.Log.MS.CurrentMilestone"] ?? "Unknown";
-      byMilestone[ms] = (byMilestone[ms] || 0) + 1;
-
-      const purpose =
-        l?.fields?.["Fields.19"] ?? "Null";
-      byPurpose[purpose] = (byPurpose[purpose] || 0) + 1;
-
-      const loName = l?.fields?.["Fields.1612"] || "Unknown";
-      const loUserId = l?.fields?.["Fields.317"];
-
-      if (!loUserId) continue;
-
-      byLO[loUserId] = byLO[loUserId] || {
-        name: loName,
-        count: 0
+    // -------- V3 pipeline fetch helper --------
+    async function fetchLoanPipeline(token, url, selectedFolderName, fields, limit) {
+      const body = {
+        fields,
+        loanFolders: [ selectedFolderName ]
       };
 
-      byLO[loUserId].count++;
-      volByLO[loUserId] = (volByLO[loUserId] || 0) + amt;
+      log("V3 loanPipeline request URL:", url);
+      log("V3 loanPipeline request body:", body);
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+
+      const text = await resp.text();
+      log("V3 response status:", String(resp.status));
+      log("V3 response text length:", String(text.length));
+
+      if (!resp.ok) {
+        log("V3 ERROR body:", text);
+        throw new Error(`v3 loanPipeline ${resp.status}`);
+      }
+
+      let json;
+      try { json = JSON.parse(text); }
+      catch {
+        log("V3 raw response (non-JSON):", text.slice(0, 1000));
+        throw new Error("V3 returned non-JSON");
+      }
+
+      const shape = summarizeJsonShape(json);
+      log("V3 response keys:", shape.keys.join(", "));
+      log("V3 response counts:", shape.counts);
+
+      const loans = pickFirstArray(json);
+      log("V3 detected loans array length:", String(loans.length));
+
+      return loans;
     }
-    // -------- END MAIN LOAN LOOP --------
 
-    // Build volume-by-name map for charts & lists
-    const volByName = {};
-    for (const [userId, data] of Object.entries(byLO)) {
-      volByName[data.name] = volByLO[userId] || 0;
+    // -------- V3 pipeline KPIs --------
+    async function refreshPipelineKpis() {
+      if (!selectedFolderName) {
+        log("No folder selected.");
+        return;
+      }
+
+      const token = await getUserAccessTokenForApi();
+      const limit = Math.max(1, Math.min(1000, Number(document.getElementById("pipeLimit").value || 1000)));
+      const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
+
+      log("Refreshing pipeline KPIs (V3)… Folder:", selectedFolderName);
+
+      // PASS 1: pull core fields to discover milestones + compute most KPIs
+      const coreFields = [
+        "Loan.LoanAmount",
+        "Loan.LoanNumber",
+        "Fields.Log.MS.CurrentMilestone",
+        "Fields.19",
+        "Fields.317"
+      ];
+
+      const loans1 = await fetchLoanPipeline(token, url, selectedFolderName, coreFields, limit);
+
+      // Compute KPIs (counts/volume/by LO/by purpose/by milestone)
+      let total = 0;
+      const byMilestone = {};
+      const byPurpose = {};
+      const byLO = {};
+      const volByLO = {};
+      const loanNumToMilestone = {};
+      const milestonesFound = new Set();
+
+      for (const l of loans1) {
+        const loanNumber =
+          l?.fields?.["Loan.LoanNumber"] ??
+          l?.LoanNumber ?? l?.loanNumber ?? null;
+
+        const amtVal =
+          l?.fields?.["Loan.LoanAmount"] ??
+          l?.fields?.["Loan.LoanAmount.Value"] ??
+          l?.fields?.["Fields.1109"] ??
+          l?.LoanAmount ?? l?.loanAmount ?? 0;
+
+        const amt = Number(String(amtVal ?? "").replace(/,/g, ""));
+        if (isFinite(amt)) total += amt;
+
+        const msVal =
+          l?.fields?.["Fields.Log.MS.CurrentMilestone"] ??
+          l?.fields?.["Loan.MilestoneName"] ??
+          l?.MilestoneName ?? l?.milestoneName ?? null;
+
+        const ms = safeText(msVal, "Unknown");
+        byMilestone[ms] = (byMilestone[ms] || 0) + 1;
+        milestonesFound.add(ms);
+
+        if (loanNumber != null) {
+          loanNumToMilestone[String(loanNumber)] = ms;
+        }
+
+        const purposeVal =
+          l?.fields?.["Fields.19"] ??
+          l?.fields?.["Loan.LoanPurpose"] ??
+          l?.LoanPurpose ?? l?.loanPurpose ?? null;
+
+        const purpose = safeText(purposeVal, "Null");
+        byPurpose[purpose] = (byPurpose[purpose] || 0) + 1;
+
+        const loVal =
+          l?.fields?.["Fields.317"] ??
+          l?.fields?.["Loan.LoanOfficer"] ??
+          l?.fields?.["Loan.LoanOfficerName"] ??
+          null;
+
+        const lo = safeText(loVal, "Null");
+        byLO[lo] = (byLO[lo] || 0) + 1;
+        volByLO[lo] = (volByLO[lo] || 0) + (isFinite(amt) ? amt : 0);
+      }
+
+      // PASS 2: pull ONLY the duration fields needed (based on milestones found)
+      // Field pattern: Fields.Log.MS.Duration.[Milestone Name]
+      const durationFields = Array.from(milestonesFound)
+        .filter(Boolean)
+        .map(ms => `Fields.Log.MS.Duration.${ms}`);
+
+      // Always include loan number so we can map durations back to milestone buckets safely
+      const durationRequestFields = ["Loan.LoanNumber", ...durationFields];
+
+      log("Milestones discovered (pass 1):", Array.from(milestonesFound));
+      log("Duration fields requested (pass 2):", durationFields);
+
+      const loans2 = await fetchLoanPipeline(token, url, selectedFolderName, durationRequestFields, limit);
+
+      const durationSumByMilestone = {};
+      const durationCountByMilestone = {};
+
+      for (const l of loans2) {
+        const loanNumber =
+          l?.fields?.["Loan.LoanNumber"] ??
+          l?.LoanNumber ?? l?.loanNumber ?? null;
+
+        const ms = loanNumToMilestone[String(loanNumber ?? "")] || null;
+        if (!ms) continue;
+
+        const durationKey = `Fields.Log.MS.Duration.${ms}`;
+        const durRaw = l?.fields?.[durationKey];
+
+        // Best-effort numeric parse (handles "12", "12.3", "12 days", etc.)
+        const dur = Number(String(durRaw ?? "").replace(/[^0-9.]/g, ""));
+        if (!isFinite(dur)) continue;
+
+        durationSumByMilestone[ms] = (durationSumByMilestone[ms] || 0) + dur;
+        durationCountByMilestone[ms] = (durationCountByMilestone[ms] || 0) + 1;
+      }
+
+      const avgDurationRows = Object.keys(durationSumByMilestone).map(ms => {
+        const sum = durationSumByMilestone[ms] || 0;
+        const n = durationCountByMilestone[ms] || 0;
+        return { milestone: ms, avgDays: n ? (sum / n) : NaN, n };
+      }).sort((a,b) => (b.avgDays || 0) - (a.avgDays || 0));
+
+      // Headline KPIs
+      document.getElementById("kpiLoans").textContent = String(loans1.length);
+      document.getElementById("kpiTotalVol").textContent = formatMoney(total);
+
+      const avg = loans1.length ? (total / loans1.length) : 0;
+      document.getElementById("kpiAvg").textContent = loans1.length ? formatMoney(avg) : "—";
+
+      const uniqueLOs = Object.keys(byLO).filter(k => k !== "Null").length || (Object.keys(byLO).length);
+      document.getElementById("kpiLoCount").textContent = String(uniqueLOs);
+
+      // Render charts + lists
+      const milestoneEntries = sortedEntries(byMilestone);
+      const purposeEntries = sortedEntries(byPurpose);
+      const loEntries = sortedEntries(byLO);
+
+      // LO chart label includes LO volume: "Name • $2.35M"
+      const loChartEntries = loEntries.map(([loName, count]) => {
+        const vol = volByLO[loName] || 0;
+        return [`${loName} • ${formatMoneyShort(vol)}`, count];
+      });
+
+      renderBarChart("milestoneChart", milestoneEntries, 12);
+      renderBarChart("loChart", loChartEntries, 12);
+      renderBarChart("purposeChart", purposeEntries, 14);
+
+      renderAvgDurationList("milestoneDurationList", avgDurationRows, 10);
+      renderTopListWithVolume("loList", loEntries, volByLO, 10);
+
+      setLastRefresh();
+      log("Pipeline KPIs refreshed ✅");
     }
 
-    // Build sorted entries
-    const milestoneEntries = sortedEntries(byMilestone);
-    const purposeEntries = sortedEntries(byPurpose);
-    const loEntries = Object.entries(byLO)
-      .map(([, data]) => [data.name, data.count])
-      .sort((a, b) => b[1] - a[1]);
-
-    if (!loDropdownInitialized) {
-      rebuildLODropdownFromLoans(byLO);
-      loDropdownInitialized = true;
-    }
-
-    // KPIs
-    kpiLoans.textContent = String(loans.length);
-    kpiTotalVol.textContent = formatMoney(total);
-    kpiAvg.textContent = loans.length
-      ? formatMoney(total / loans.length)
-      : "—";
-    kpiLoCount.textContent = String(Object.keys(byLO).length);
-
-    // Charts
-    const loChartEntries = loEntries.map(([name, count]) => [
-      `${name} • ${formatMoneyShort(volByName[name] || 0)}`,
-      count
-    ]);
-
-    renderBarChart("milestoneChart", milestoneEntries, 12);
-    renderBarChart("loChart", loChartEntries, 12);
-    renderBarChart("purposeChart", purposeEntries, 14);
-
-    // Lists
-    renderTopListWithVolume("loList", loEntries, volByName, 10);
-
-    setLastRefresh();
-    log("Pipeline KPIs refreshed ✅");
-  }
-
-  // ---------- Buttons ----------
-  document.getElementById("btnPipeline").addEventListener("click", () => {
-    refreshPipelineKpis().catch(e => {
-      log("Pipeline KPI ERROR:", e.message);
+    // ---------- Buttons ----------
+    document.getElementById("btnPipeline").addEventListener("click", () => {
+      refreshPipelineKpis().catch(e => {
+        log("Pipeline KPI ERROR:", e.message);
+      });
     });
-  });
 
-  document.getElementById("btnClear").addEventListener("click", () => {
-    debugEl.textContent = "";
-    log("Debug cleared ✅");
-  });
+    document.getElementById("btnClear").addEventListener("click", () => {
+      debugEl.textContent = "";
+      log("Debug cleared ✅");
+    });
 
-  // ---------- On load ----------
-  (async function init() {
-    try {
-      await loadFoldersIntoDropdown();
-    } catch (e) {
-      folderStatus.textContent = "Failed ❌";
-      log("INIT ERROR:", e.message);
-    }
-  })();
+    // ---------- On load ----------
+    (async function init() {
+      try {
+        await loadFoldersIntoDropdown();
+      } catch (e) {
+        folderStatus.textContent = "Failed ❌";
+        log("INIT ERROR:", e.message);
+      }
+    })();
   </script>
 </body>
 </html>
