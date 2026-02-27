@@ -154,7 +154,7 @@
     <div class="card span-6">
       <div class="kpi-label">Loans by Loan Officer</div>
       <canvas id="loChart" height="180"></canvas>
-      <div class="kpi-sub">Grouped by <code>Fields.317</code> (label includes LO total volume)</div>
+      <div class="kpi-sub">Grouped by <code>Fields.1612</code> (label includes LO total volume)</div>
     </div>
 
     <div class="card span-12">
@@ -280,7 +280,7 @@
     let selectedLO = "";
     let selectedState = "";
     let loDropdownInitialized = false;
-    let loIdByName = {};
+
 
     function extractFolderList(json) {
       if (Array.isArray(json)) return json;
@@ -388,9 +388,8 @@
 
     // Hook changes for filters
     loSelect.addEventListener("change", () => {
-    const loName = loSelect.value || "";
-    selectedLO = loIdByName[loName] || "";
-    log("LO filter changed:", { loName, selectedLO });
+    selectedLO = loSelect.value || "";
+    log("LO filter changed:", selectedLO || "(All)");
     });
 
     stateSelect.addEventListener("change", () => {
@@ -566,7 +565,7 @@
 
     if (selectedLO) {
       terms.push({
-        canonicalName: "Fields.317",   // LO USER ID
+        canonicalName: "Fields.1612",   // LO USER ID
         value: selectedLO,
         matchType: "exact",
         include: true
@@ -587,24 +586,32 @@
   }
 
   // -------- V3 pipeline KPIs --------
+   // -------- V3 pipeline KPIs --------
   async function refreshPipelineKpis() {
     if (!selectedFolderName) return;
 
     const token = await getUserAccessTokenForApi();
-    const limit = Math.max(1, Math.min(1000, Number(pipeLimit.value || 1000)));
+    const limit = Math.max(
+      1,
+      Math.min(1000, Number(pipeLimit.value || 1000))
+    );
+
     const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
     const filterObj = buildFilterObject();
 
-    log("Refreshing KPIs", { selectedFolderName, selectedLO, selectedState });
+    log("Refreshing KPIs", {
+      folder: selectedFolderName,
+      lo: selectedLO || "(All)",
+      state: selectedState || "(All)"
+    });
 
     const coreFields = [
       "Loan.LoanAmount",
       "Loan.LoanNumber",
       "Fields.Log.MS.CurrentMilestone",
       "Fields.19",
-      "Fields.317",
-      "Loan.LoanOfficerName",
-      "Fields.12"
+      "Fields.1612", // Loan Officer Full Name
+      "Fields.12"    // State
     ];
 
     const loans = await fetchLoanPipeline(
@@ -623,9 +630,9 @@
     const milestonesFound = new Set();
     const loanNumToMilestone = {};
 
-    // IMPORTANT: reset the shared lookup, do NOT redeclare it
-    loIdByName = {};
-
+    // -------------------------------
+    // MAIN LOAN LOOP (DATA BUILD)
+    // -------------------------------
     for (const l of loans) {
       const amt = Number(
         String(
@@ -649,7 +656,9 @@
         l?.LoanNumber ??
         null;
 
-      if (loanNum) loanNumToMilestone[String(loanNum)] = ms;
+      if (loanNum) {
+        loanNumToMilestone[String(loanNum)] = ms;
+      }
 
       const purpose =
         l?.fields?.["Fields.19"] ??
@@ -657,42 +666,41 @@
 
       byPurpose[purpose] = (byPurpose[purpose] || 0) + 1;
 
-      // ✅ CORRECT LO HANDLING (NAME vs ID)
       const loName =
-        l?.fields?.["Loan.LoanOfficerName"] ??
+        l?.fields?.["Fields.1612"] ??
         "Null";
-
-      const loId =
-        l?.fields?.["Fields.317"] ??
-        null;
 
       byLO[loName] = (byLO[loName] || 0) + 1;
       volByLO[loName] = (volByLO[loName] || 0) + (isFinite(amt) ? amt : 0);
-
-      if (loId && !loIdByName[loName]) {
-        loIdByName[loName] = loId;
-      }
     }
+    // -------- END LOAN LOOP --------
 
+    // Build sorted entries ONCE
     const milestoneEntries = sortedEntries(byMilestone);
     const purposeEntries = sortedEntries(byPurpose);
     const loEntries = sortedEntries(byLO);
 
-    // ✅ Initialize LO dropdown ONCE per folder
+    // Initialize LO dropdown ONCE per folder
     if (!loDropdownInitialized) {
       rebuildLODropdownFromLoans(loEntries);
       loDropdownInitialized = true;
     }
 
-    // Headline KPIs
-    kpiLoans.textContent = loans.length;
+    // -------------------------------
+    // HEADLINE KPIs
+    // -------------------------------
+    kpiLoans.textContent = String(loans.length);
     kpiTotalVol.textContent = formatMoney(total);
-    kpiAvg.textContent = loans.length ? formatMoney(total / loans.length) : "—";
-    kpiLoCount.textContent = Object.keys(byLO).length;
+    kpiAvg.textContent = loans.length
+      ? formatMoney(total / loans.length)
+      : "—";
+    kpiLoCount.textContent = String(Object.keys(byLO).length);
 
-    // Charts
+    // -------------------------------
+    // CHARTS
+    // -------------------------------
     const loChartEntries = loEntries.map(([name, count]) => [
-      `${name} • ${formatMoneyShort(volByLO[name])}`,
+      `${name} • ${formatMoneyShort(volByLO[name] || 0)}`,
       count
     ]);
 
@@ -700,33 +708,36 @@
     renderBarChart("loChart", loChartEntries, 12);
     renderBarChart("purposeChart", purposeEntries, 14);
 
+    // -------------------------------
+    // LISTS
+    // -------------------------------
     renderTopListWithVolume("loList", loEntries, volByLO, 10);
 
     setLastRefresh();
     log("Pipeline KPIs refreshed ✅");
   }
 
-    // ---------- Buttons ----------
-    document.getElementById("btnPipeline").addEventListener("click", () => {
-      refreshPipelineKpis().catch(e => {
-        log("Pipeline KPI ERROR:", e.message);
-      });
+  // ---------- Buttons ----------
+  document.getElementById("btnPipeline").addEventListener("click", () => {
+    refreshPipelineKpis().catch(e => {
+      log("Pipeline KPI ERROR:", e.message);
     });
+  });
 
-    document.getElementById("btnClear").addEventListener("click", () => {
-      debugEl.textContent = "";
-      log("Debug cleared ✅");
-    });
+  document.getElementById("btnClear").addEventListener("click", () => {
+    debugEl.textContent = "";
+    log("Debug cleared ✅");
+  });
 
-    // ---------- On load ----------
-    (async function init() {
-      try {
-        await loadFoldersIntoDropdown();
-      } catch (e) {
-        folderStatus.textContent = "Failed ❌";
-        log("INIT ERROR:", e.message);
-      }
-    })();
+  // ---------- On load ----------
+  (async function init() {
+    try {
+      await loadFoldersIntoDropdown();
+    } catch (e) {
+      folderStatus.textContent = "Failed ❌";
+      log("INIT ERROR:", e.message);
+    }
+  })();
   </script>
 </body>
 </html>
