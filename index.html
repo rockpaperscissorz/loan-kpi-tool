@@ -386,11 +386,10 @@
 
     folderSelect.addEventListener("change", onFolderChanged);
 
-    // Hook changes for filters
     loSelect.addEventListener("change", () => {
-    selectedLO = loSelect.value || "";
-    log("LO filter changed:", selectedLO || "(All)");
-    refreshPipelineKpis(); // ✅ THIS IS THE KEY
+    selectedLO = loSelect.value || ""; // USER ID ONLY
+    log("LO filter changed (UserId):", selectedLO || "(All)");
+    refreshPipelineKpis();
     });
 
     stateSelect.addEventListener("change", () => {
@@ -584,7 +583,7 @@ function buildFilterObject() {
 }
 
   // -------- V3 pipeline KPIs --------
-   // -------- V3 pipeline KPIs --------
+  // -------- V3 pipeline KPIs --------
   async function refreshPipelineKpis() {
     if (!selectedFolderName) return;
 
@@ -603,15 +602,15 @@ function buildFilterObject() {
       state: selectedState || "(All)"
     });
 
-const coreFields = [
-  "Loan.LoanAmount",
-  "Loan.LoanNumber",
-  "Fields.Log.MS.CurrentMilestone",
-  "Fields.19",
-  "Fields.1612", // LO Full Name (display)
-  "Fields.317",  // ✅ LO User ID (filter)
-  "Fields.12"    // ✅ State (V3 canonical)
-];
+    const coreFields = [
+      "Loan.LoanAmount",
+      "Loan.LoanNumber",
+      "Fields.Log.MS.CurrentMilestone",
+      "Fields.19",
+      "Fields.1612", // LO Full Name (display)
+      "Fields.317",  // LO User ID (identity)
+      "Fields.12"    // State
+    ];
 
     const loans = await fetchLoanPipeline(
       token,
@@ -626,11 +625,9 @@ const coreFields = [
     const byPurpose = {};
     const byLO = {};
     const volByLO = {};
-    const milestonesFound = new Set();
-    const loanNumToMilestone = {};
 
     // -------------------------------
-    // MAIN LOAN LOOP (DATA BUILD)
+    // MAIN LOAN LOOP
     // -------------------------------
     for (const l of loans) {
       const amt = Number(
@@ -644,62 +641,47 @@ const coreFields = [
       if (isFinite(amt)) total += amt;
 
       const ms =
-        l?.fields?.["Fields.Log.MS.CurrentMilestone"] ??
-        "Unknown";
-
+        l?.fields?.["Fields.Log.MS.CurrentMilestone"] ?? "Unknown";
       byMilestone[ms] = (byMilestone[ms] || 0) + 1;
-      milestonesFound.add(ms);
-
-      const loanNum =
-        l?.fields?.["Loan.LoanNumber"] ??
-        l?.LoanNumber ??
-        null;
-
-      if (loanNum) {
-        loanNumToMilestone[String(loanNum)] = ms;
-      }
 
       const purpose =
-        l?.fields?.["Fields.19"] ??
-        "Null";
-
+        l?.fields?.["Fields.19"] ?? "Null";
       byPurpose[purpose] = (byPurpose[purpose] || 0) + 1;
 
-    const loName = l?.fields?.["Fields.1612"] || "Unknown";
-    const loUserId = l?.fields?.["Fields.317"];
+      const loName = l?.fields?.["Fields.1612"] || "Unknown";
+      const loUserId = l?.fields?.["Fields.317"];
 
-    if (loUserId) {
-    byLO[loUserId] = byLO[loUserId] || {
+      if (!loUserId) continue;
+
+      byLO[loUserId] = byLO[loUserId] || {
         name: loName,
         count: 0
-    };
+      };
 
-    byLO[loUserId].count++;
-    volByLO[loUserId] = (volByLO[loUserId] || 0) + amt;
+      byLO[loUserId].count++;
+      volByLO[loUserId] = (volByLO[loUserId] || 0) + amt;
     }
-}
-        // Build volume-by-name map for charts & lists
+    // -------- END MAIN LOAN LOOP --------
+
+    // Build volume-by-name map for charts & lists
     const volByName = {};
     for (const [userId, data] of Object.entries(byLO)) {
-    volByName[data.name] = volByLO[userId] || 0;
+      volByName[data.name] = volByLO[userId] || 0;
     }
-    // -------- END LOAN LOOP --------
 
-    // Build sorted entries ONCE
+    // Build sorted entries
     const milestoneEntries = sortedEntries(byMilestone);
     const purposeEntries = sortedEntries(byPurpose);
     const loEntries = Object.entries(byLO)
-    .map(([userId, data]) => [data.name, data.count])
-    .sort((a, b) => b[1] - a[1]);
+      .map(([, data]) => [data.name, data.count])
+      .sort((a, b) => b[1] - a[1]);
 
     if (!loDropdownInitialized) {
-    rebuildLODropdownFromLoans(byLO);
-    loDropdownInitialized = true;
+      rebuildLODropdownFromLoans(byLO);
+      loDropdownInitialized = true;
     }
 
-    // -------------------------------
-    // HEADLINE KPIs
-    // -------------------------------
+    // KPIs
     kpiLoans.textContent = String(loans.length);
     kpiTotalVol.textContent = formatMoney(total);
     kpiAvg.textContent = loans.length
@@ -707,9 +689,7 @@ const coreFields = [
       : "—";
     kpiLoCount.textContent = String(Object.keys(byLO).length);
 
-    // -------------------------------
-    // CHARTS
-    // -------------------------------
+    // Charts
     const loChartEntries = loEntries.map(([name, count]) => [
       `${name} • ${formatMoneyShort(volByName[name] || 0)}`,
       count
@@ -719,9 +699,7 @@ const coreFields = [
     renderBarChart("loChart", loChartEntries, 12);
     renderBarChart("purposeChart", purposeEntries, 14);
 
-    // -------------------------------
-    // LISTS
-    // -------------------------------
+    // Lists
     renderTopListWithVolume("loList", loEntries, volByName, 10);
 
     setLastRefresh();
