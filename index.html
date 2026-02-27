@@ -390,6 +390,7 @@
     loSelect.addEventListener("change", () => {
     selectedLO = loSelect.value || "";
     log("LO filter changed:", selectedLO || "(All)");
+    refreshPipelineKpis(); // ✅ THIS IS THE KEY
     });
 
     stateSelect.addEventListener("change", () => {
