@@ -394,8 +394,9 @@
     });
 
     stateSelect.addEventListener("change", () => {
-      selectedState = stateSelect.value || "";
-      log("State filter changed:", selectedState || "(All)");
+    selectedState = stateSelect.value || "";
+    log("State filter changed:", selectedState || "(All)");
+    refreshPipelineKpis(); // ✅ REQUIRED
     });
 
     // ---------- Response helpers ----------
@@ -469,8 +470,13 @@
     loSelect.innerHTML =
         `<option value="">All LOs</option>` +
         unique.map(n =>
-        `<option value="${escapeHtml(n)}"${n === current ? " selected" : ""}>${escapeHtml(n)}</option>`
+        `<option value="${escapeHtml(n)}"${
+            n === current ? " selected" : ""
+        }>${escapeHtml(n)}</option>`
         ).join("");
+
+    // 🔑 keep selectedLO in sync with DOM
+    selectedLO = loSelect.value || "";
 
     loSelect.disabled = false;
     }
