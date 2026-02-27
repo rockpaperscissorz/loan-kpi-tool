@@ -132,7 +132,7 @@
     <div class="card span-6">
       <div class="kpi-label">Loans by Loan Officer</div>
       <canvas id="loChart" height="180"></canvas>
-      <div class="kpi-sub">Grouped by <code>Fields.317</code> (Null bucket if missing)</div>
+      <div class="kpi-sub">Grouped by <code>Fields.317</code> (label includes LO total volume)</div>
     </div>
 
     <div class="card span-12">
@@ -141,17 +141,17 @@
       <div class="kpi-sub">Bar chart grouped by <code>Fields.19</code></div>
     </div>
 
-    <!-- Top lists -->
+    <!-- Lists -->
     <div class="card span-6">
-      <div class="kpi-label">Top Milestones</div>
-      <div class="list" id="milestoneList">—</div>
-      <div class="kpi-sub">Top 10 by count</div>
+      <div class="kpi-label">Average Milestone Duration</div>
+      <div class="list" id="milestoneDurationList">—</div>
+      <div class="kpi-sub">Avg duration for loans currently in each milestone (from <code>Fields.Log.MS.Duration.[Milestone]</code>)</div>
     </div>
 
     <div class="card span-6">
       <div class="kpi-label">Top Loan Officers</div>
       <div class="list" id="loList">—</div>
-      <div class="kpi-sub">Top 10 by count</div>
+      <div class="kpi-sub">Top 10 by count (shows LO total volume too)</div>
     </div>
   </div>
 
@@ -204,6 +204,16 @@
       const num = Number(String(n ?? "").replace(/,/g, ""));
       if (!isFinite(num)) return "—";
       return num.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+    }
+
+    function formatMoneyShort(n) {
+      const num = Number(n);
+      if (!isFinite(num)) return "—";
+      const abs = Math.abs(num);
+      if (abs >= 1e9) return `$${(num/1e9).toFixed(2)}B`;
+      if (abs >= 1e6) return `$${(num/1e6).toFixed(2)}M`;
+      if (abs >= 1e3) return `$${(num/1e3).toFixed(0)}K`;
+      return formatMoney(num);
     }
 
     function safeText(v, fallback="—") {
@@ -313,7 +323,7 @@
       document.getElementById("kpiLoCount").textContent = "—";
 
       // Clear lists
-      document.getElementById("milestoneList").textContent = "—";
+      document.getElementById("milestoneDurationList").textContent = "—";
       document.getElementById("loList").textContent = "—";
 
       // Clear charts
@@ -353,7 +363,16 @@
       return Object.entries(obj).sort((a,b) => b[1] - a[1]);
     }
 
-    function renderTopList(containerId, entries, topN=10) {
+    function escapeHtml(s) {
+      return String(s ?? "")
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
+    }
+
+    function renderTopListWithVolume(containerId, entries, volByKey, topN=10) {
       const el = document.getElementById(containerId);
       if (!el) return;
       if (!entries.length) { el.textContent = "—"; return; }
@@ -362,20 +381,27 @@
         <div class="list-item">
           <div>
             <b>${escapeHtml(k)}</b>
-            <div class="badge">${v} loans</div>
+            <div class="badge">${v} loans • ${escapeHtml(formatMoneyShort(volByKey?.[k] || 0))}</div>
           </div>
           <div class="right kpi-mini">${v}</div>
         </div>
       `).join("");
     }
 
-    function escapeHtml(s) {
-      return String(s ?? "")
-        .replace(/&/g,"&amp;")
-        .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;")
-        .replace(/"/g,"&quot;")
-        .replace(/'/g,"&#039;");
+    function renderAvgDurationList(containerId, rows, topN=10) {
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      if (!rows.length) { el.textContent = "—"; return; }
+
+      el.innerHTML = rows.slice(0, topN).map(r => `
+        <div class="list-item">
+          <div>
+            <b>${escapeHtml(r.milestone)}</b>
+            <div class="badge">${r.n} loans w/ duration</div>
+          </div>
+          <div class="right kpi-mini">${isFinite(r.avgDays) ? r.avgDays.toFixed(1) : "—"} d</div>
+        </div>
+      `).join("");
     }
 
     // ---------- Simple bar chart renderer ----------
@@ -423,38 +449,18 @@
         ctx.fillRect(x, y, barWidth, barHeight);
         ctx.fillText(String(val), x, Math.max(12, y - 6));
 
-        const short = label.length > 14 ? label.slice(0, 14) + "…" : label;
+        const short = label.length > 18 ? label.slice(0, 18) + "…" : label;
         ctx.fillText(short, x, h - 10);
       });
     }
 
-    // -------- V3 pipeline KPIs --------
-    async function refreshPipelineKpis() {
-      if (!selectedFolderName) {
-        log("No folder selected.");
-        return;
-      }
-
-      const token = await getUserAccessTokenForApi();
-      const limit = Math.max(1, Math.min(1000, Number(document.getElementById("pipeLimit").value || 1000)));
-      const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
-
-      // Requests:
-      // - CurrentMilestone: Fields.Log.MS.CurrentMilestone
-      // - Loan Purpose: Fields.19 (for bar chart only)
-      // - Loan Officer: Fields.317
+    // -------- V3 pipeline fetch helper --------
+    async function fetchLoanPipeline(token, url, selectedFolderName, fields, limit) {
       const body = {
-        fields: [
-          "Loan.LoanAmount",
-          "Loan.LoanNumber",
-          "Fields.Log.MS.CurrentMilestone",
-          "Fields.19",
-          "Fields.317"
-        ],
+        fields,
         loanFolders: [ selectedFolderName ]
       };
 
-      log("Refreshing pipeline KPIs (V3)… Folder:", selectedFolderName);
       log("V3 loanPipeline request URL:", url);
       log("V3 loanPipeline request body:", body);
 
@@ -487,13 +493,47 @@
       const loans = pickFirstArray(json);
       log("V3 detected loans array length:", String(loans.length));
 
-      // Compute KPIs
+      return loans;
+    }
+
+    // -------- V3 pipeline KPIs --------
+    async function refreshPipelineKpis() {
+      if (!selectedFolderName) {
+        log("No folder selected.");
+        return;
+      }
+
+      const token = await getUserAccessTokenForApi();
+      const limit = Math.max(1, Math.min(1000, Number(document.getElementById("pipeLimit").value || 1000)));
+      const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
+
+      log("Refreshing pipeline KPIs (V3)… Folder:", selectedFolderName);
+
+      // PASS 1: pull core fields to discover milestones + compute most KPIs
+      const coreFields = [
+        "Loan.LoanAmount",
+        "Loan.LoanNumber",
+        "Fields.Log.MS.CurrentMilestone",
+        "Fields.19",
+        "Fields.317"
+      ];
+
+      const loans1 = await fetchLoanPipeline(token, url, selectedFolderName, coreFields, limit);
+
+      // Compute KPIs (counts/volume/by LO/by purpose/by milestone)
       let total = 0;
       const byMilestone = {};
       const byPurpose = {};
       const byLO = {};
+      const volByLO = {};
+      const loanNumToMilestone = {};
+      const milestonesFound = new Set();
 
-      for (const l of loans) {
+      for (const l of loans1) {
+        const loanNumber =
+          l?.fields?.["Loan.LoanNumber"] ??
+          l?.LoanNumber ?? l?.loanNumber ?? null;
+
         const amtVal =
           l?.fields?.["Loan.LoanAmount"] ??
           l?.fields?.["Loan.LoanAmount.Value"] ??
@@ -510,6 +550,11 @@
 
         const ms = safeText(msVal, "Unknown");
         byMilestone[ms] = (byMilestone[ms] || 0) + 1;
+        milestonesFound.add(ms);
+
+        if (loanNumber != null) {
+          loanNumToMilestone[String(loanNumber)] = ms;
+        }
 
         const purposeVal =
           l?.fields?.["Fields.19"] ??
@@ -527,29 +572,78 @@
 
         const lo = safeText(loVal, "Null");
         byLO[lo] = (byLO[lo] || 0) + 1;
+        volByLO[lo] = (volByLO[lo] || 0) + (isFinite(amt) ? amt : 0);
       }
 
+      // PASS 2: pull ONLY the duration fields needed (based on milestones found)
+      // Field pattern: Fields.Log.MS.Duration.[Milestone Name]
+      const durationFields = Array.from(milestonesFound)
+        .filter(Boolean)
+        .map(ms => `Fields.Log.MS.Duration.${ms}`);
+
+      // Always include loan number so we can map durations back to milestone buckets safely
+      const durationRequestFields = ["Loan.LoanNumber", ...durationFields];
+
+      log("Milestones discovered (pass 1):", Array.from(milestonesFound));
+      log("Duration fields requested (pass 2):", durationFields);
+
+      const loans2 = await fetchLoanPipeline(token, url, selectedFolderName, durationRequestFields, limit);
+
+      const durationSumByMilestone = {};
+      const durationCountByMilestone = {};
+
+      for (const l of loans2) {
+        const loanNumber =
+          l?.fields?.["Loan.LoanNumber"] ??
+          l?.LoanNumber ?? l?.loanNumber ?? null;
+
+        const ms = loanNumToMilestone[String(loanNumber ?? "")] || null;
+        if (!ms) continue;
+
+        const durationKey = `Fields.Log.MS.Duration.${ms}`;
+        const durRaw = l?.fields?.[durationKey];
+
+        // Best-effort numeric parse (handles "12", "12.3", "12 days", etc.)
+        const dur = Number(String(durRaw ?? "").replace(/[^0-9.]/g, ""));
+        if (!isFinite(dur)) continue;
+
+        durationSumByMilestone[ms] = (durationSumByMilestone[ms] || 0) + dur;
+        durationCountByMilestone[ms] = (durationCountByMilestone[ms] || 0) + 1;
+      }
+
+      const avgDurationRows = Object.keys(durationSumByMilestone).map(ms => {
+        const sum = durationSumByMilestone[ms] || 0;
+        const n = durationCountByMilestone[ms] || 0;
+        return { milestone: ms, avgDays: n ? (sum / n) : NaN, n };
+      }).sort((a,b) => (b.avgDays || 0) - (a.avgDays || 0));
+
       // Headline KPIs
-      document.getElementById("kpiLoans").textContent = String(loans.length);
+      document.getElementById("kpiLoans").textContent = String(loans1.length);
       document.getElementById("kpiTotalVol").textContent = formatMoney(total);
 
-      const avg = loans.length ? (total / loans.length) : 0;
-      document.getElementById("kpiAvg").textContent = loans.length ? formatMoney(avg) : "—";
+      const avg = loans1.length ? (total / loans1.length) : 0;
+      document.getElementById("kpiAvg").textContent = loans1.length ? formatMoney(avg) : "—";
 
       const uniqueLOs = Object.keys(byLO).filter(k => k !== "Null").length || (Object.keys(byLO).length);
       document.getElementById("kpiLoCount").textContent = String(uniqueLOs);
 
-      // Render charts + lists (trend-style: top N focus)
+      // Render charts + lists
       const milestoneEntries = sortedEntries(byMilestone);
       const purposeEntries = sortedEntries(byPurpose);
       const loEntries = sortedEntries(byLO);
 
+      // LO chart label includes LO volume: "Name • $2.35M"
+      const loChartEntries = loEntries.map(([loName, count]) => {
+        const vol = volByLO[loName] || 0;
+        return [`${loName} • ${formatMoneyShort(vol)}`, count];
+      });
+
       renderBarChart("milestoneChart", milestoneEntries, 12);
-      renderBarChart("loChart", loEntries, 12);
+      renderBarChart("loChart", loChartEntries, 12);
       renderBarChart("purposeChart", purposeEntries, 14);
 
-      renderTopList("milestoneList", milestoneEntries, 10);
-      renderTopList("loList", loEntries, 10);
+      renderAvgDurationList("milestoneDurationList", avgDurationRows, 10);
+      renderTopListWithVolume("loList", loEntries, volByLO, 10);
 
       setLastRefresh();
       log("Pipeline KPIs refreshed ✅");
