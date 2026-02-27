@@ -48,6 +48,25 @@
     .right { text-align:right; white-space:nowrap; }
     .badge { font-size: 11px; opacity:0.75; }
     canvas { width: 100%; display:block; }
+
+        /* Scrollable KPI lists when content is tall */
+    .list.scrollable {
+    max-height: 360px;        /* ~10 rows before scroll */
+    overflow-y: auto;
+    padding-right: 6px;      /* space for scrollbar */
+    }
+
+    /* Optional: nicer scrollbar (WebKit only) */
+    .list.scrollable::-webkit-scrollbar {
+    width: 8px;
+    }
+    .list.scrollable::-webkit-scrollbar-thumb {
+    background: #d0d0d0;
+    border-radius: 8px;
+    }
+    .list.scrollable::-webkit-scrollbar-track {
+    background: transparent;
+    }
   </style>
 </head>
 
@@ -150,7 +169,7 @@
 
     <div class="card span-6">
       <div class="kpi-label">Top Loan Officers</div>
-      <div class="list" id="loList">—</div>
+      <div class="list scrollable" id="loList">—</div>
       <div class="kpi-sub">Top 10 by count (shows LO total volume too)</div>
     </div>
   </div>
@@ -640,7 +659,7 @@
       });
 
       renderBarChart("milestoneChart", milestoneEntries, 12);
-      renderBarChart("loChart", loChartEntries, 12);
+      renderBarChart("loChart", loChartEntries, 6);
       renderBarChart("purposeChart", purposeEntries, 14);
 
       renderAvgDurationList("milestoneDurationList", avgDurationRows, 10);
