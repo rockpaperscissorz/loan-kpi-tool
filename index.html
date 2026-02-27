@@ -105,7 +105,6 @@
     .modal-top{ display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
     .modal-body{ margin-top:10px; }
     .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-
     pre{ background:#f7f7f7; padding:10px; border-radius:10px; overflow:auto; }
   </style>
 </head>
@@ -115,7 +114,7 @@
     <h1>Pipeline KPI Dashboard</h1>
     <div class="muted">
       Folder list via <code>/encompass/v3/loanFolders</code>. Pipeline data via <code>/encompass/v3/loanPipeline</code>.
-      KPIs computed client-side from returned loans (respecting filters).
+      Loan Officers via <code>/encompass/v1/company/users</code> (filtered by persona “Loan Officer”).
     </div>
 
     <div class="toolbar">
@@ -123,6 +122,7 @@
         <span class="pill"><b>SSF</b>: <span id="ssfStatus">Checking…</span></span>
         <span class="pill"><b>Guest</b>: <span id="guestStatus">Not started</span></span>
         <span class="pill"><b>Folders</b>: <span id="folderStatus">Not loaded</span></span>
+        <span class="pill"><b>LOs</b>: <span id="loStatus">Not loaded</span></span>
         <span class="pill"><b>Last refresh</b>: <span id="lastRefresh">—</span></span>
       </div>
 
@@ -138,10 +138,10 @@
 
     <!-- Controls -->
     <div class="row">
-    <div class="field">
-      <label class="muted">Loan Folder(s)</label>
-      <div class="ms" id="folderMs" data-ms="folders"></div>
-    </div>
+      <div class="field">
+        <label class="muted">Loan Folder(s)</label>
+        <div class="ms" data-ms="folders"></div>
+      </div>
 
       <div class="field small">
         <label class="muted">Limit</label>
@@ -151,11 +151,6 @@
       <div class="field small">
         <label class="muted">Aging threshold (days)</label>
         <input id="ageDays" class="input" type="number" min="1" max="365" value="45" />
-      </div>
-
-      <div class="field small">
-        <label class="muted">UW Date Field (optional)</label>
-        <input id="uwField" class="input" placeholder="e.g. Fields.XXXX" value="" />
       </div>
 
       <div class="field small">
@@ -171,6 +166,11 @@
       <div class="field">
         <label class="muted">Loan Officer</label>
         <div class="ms" data-ms="lo"></div>
+      </div>
+
+      <div class="field">
+        <label class="muted">Amortization Type (608)</label>
+        <div class="ms" data-ms="amort"></div>
       </div>
 
       <div class="field">
@@ -225,13 +225,13 @@
     <div class="card span-3 kpi-tile" data-kpi="appsMTD">
       <div class="kpi-label">Applications Received (MTD)</div>
       <div class="kpi-value" id="k_appsMTD">—</div>
-      <div class="kpi-sub"><span id="t_appsMTD" class="trend"></span><span class="muted">Fields.745 in month</span></div>
+      <div class="kpi-sub"><span id="t_appsMTD" class="trend"></span><span class="muted">Apps Started This Month</span></div>
     </div>
 
     <div class="card span-3 kpi-tile" data-kpi="fundedMTD">
       <div class="kpi-label">Funded / Closed (MTD)</div>
       <div class="kpi-value" id="k_fundedMTD">—</div>
-      <div class="kpi-sub"><span id="t_fundedMTD" class="trend"></span><span class="muted">Fields.748 in month</span></div>
+      <div class="kpi-sub"><span id="t_fundedMTD" class="trend"></span><span class="muted">Loans Closed This Month</span></div>
     </div>
 
     <div class="card span-3 kpi-tile" data-kpi="pullThrough">
@@ -256,7 +256,7 @@
     <div class="card span-3 kpi-tile" data-kpi="t_appToUW">
       <div class="kpi-label">Avg Days: App → UW Approval</div>
       <div class="kpi-value" id="k_appToUW">—</div>
-      <div class="kpi-sub"><span id="t_appToUW" class="trend"></span><span class="muted">745 → UW Field</span></div>
+      <div class="kpi-sub"><span id="t_appToUW" class="trend"></span><span class="muted">745 → 2301</span></div>
     </div>
 
     <div class="card span-3 kpi-tile" data-kpi="t_appToClose">
@@ -285,6 +285,17 @@
     </div>
 
     <div class="card span-12">
+      <div class="kpi-label">Milestone Turn Times (Average Days)</div>
+      <canvas id="c_turnTimes" height="160"></canvas>
+      <div class="kpi-sub">
+        Using milestone date fields:
+        <code id="msFieldLoanApp">Fields.Log.MS.Date.Loan App</code> and
+        <code id="msFieldProcessing">Fields.Log.MS.Date.Processing</code>.
+        If this chart is blank, verify milestone date field syntax in your tenant.
+      </div>
+    </div>
+
+    <div class="card span-12">
       <div class="kpi-label">Loan Purpose Distribution</div>
       <canvas id="c_purpose" height="160"></canvas>
       <div class="kpi-sub">Grouped by <code>Fields.19</code> (Unknown excluded)</div>
@@ -293,7 +304,7 @@
     <div class="card span-6">
       <div class="kpi-label">Rate Type Mix (Buckets)</div>
       <div class="list" id="rateTypeList">—</div>
-      <div class="kpi-sub">Click a bucket to drill-through. HELOC never counted as Conventional.</div>
+      <div class="kpi-sub">Click a bucket to drill-through.</div>
     </div>
 
     <div class="card span-6">
@@ -386,7 +397,6 @@
     const normStr = (v) => {
       const s = String(v ?? "").trim();
       if (!s) return "";
-      // treat Unknown as empty for our "do not pull unknown" requirement
       if (s.toLowerCase() === "unknown") return "";
       return s;
     };
@@ -438,9 +448,7 @@
 
     const pct = (num) => (Number.isFinite(num) ? (num*100).toFixed(0)+"%" : "—");
 
-    function setLastRefresh(){
-      $("lastRefresh").textContent = new Date().toLocaleString();
-    }
+    function setLastRefresh(){ $("lastRefresh").textContent = new Date().toLocaleString(); }
 
     function escapeHtml(s){
       return String(s ?? "")
@@ -472,58 +480,10 @@
     }
 
     // -----------------------------
-    // Folder loading
-    // -----------------------------
-    const folderStatus = $("folderStatus");
-    const btnRefresh = $("btnRefresh");
-
-    let msFolders; // will be initialized after createMultiSelect is defined
-
-    function extractFolders(payload){
-      if (Array.isArray(payload)) return payload;
-      if (Array.isArray(payload?.loanFolders)) return payload.loanFolders;
-      if (Array.isArray(payload?.items)) return payload.items;
-      return [];
-    }
-    const folderName = (f) => (f?.folderName || f?.name || f?.FolderName || f?.Name || "").trim();
-
-    async function loadFolders(){
-      folderStatus.textContent = "Loading…";
-      btnRefresh.disabled = true;
-
-      const token = await getAccessToken();
-      const url = `${API_SERVER}/encompass/v3/loanFolders?start=0&limit=2000`;
-
-      log("GET folders:", url);
-
-      const r = await fetch(url, { headers:{ Authorization:`Bearer ${token}` } });
-      const json = await r.json();
-
-      const folders = extractFolders(json).map(folderName).filter(Boolean);
-      const unique = Array.from(new Set(folders)).sort((a,b)=>a.localeCompare(b));
-
-    folderStatus.textContent = "Ready ✅";
-
-    // set folder multiselect options
-    msFolders.setOptions(unique);
-
-    // default to Pipeline selected
-    const pipeline = unique.find(n => n.toLowerCase() === "pipeline");
-    if (pipeline) msFolders.setSelected([pipeline]);
-
-    btnRefresh.disabled = (msFolders.getSelected().length === 0);
-
-    // ✅ initial data pull when tool loads
-    if (msFolders.getSelected().length){
-      refresh().catch(e => log("Auto refresh error:", e.message));
-    }
-    }
-    // -----------------------------
     // Multi-select component
     // -----------------------------
     function createMultiSelect(mountEl, { placeholder="All", onChange }){
       const root = document.createElement("div");
-
       root.innerHTML = `
         <button type="button" class="ms-btn"><span class="ms-label">${placeholder}</span><span>▾</span></button>
         <div class="ms-menu">
@@ -535,7 +495,6 @@
           <div class="ms-items"></div>
         </div>
       `;
-
       mountEl.appendChild(root);
 
       const btn = root.querySelector(".ms-btn");
@@ -569,7 +528,8 @@
       }
 
       function setOptions(list){
-        options = Array.from(new Set((list || []).map(s => String(s).trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+        options = Array.from(new Set((list || []).map(s => String(s).trim()).filter(Boolean)))
+          .sort((a,b)=>a.localeCompare(b));
         selected = new Set(Array.from(selected).filter(s => options.includes(s)));
         render();
       }
@@ -581,15 +541,9 @@
         onChange?.(getSelected());
       }
 
-      function getSelected(){
-        return Array.from(selected);
-      }
+      function getSelected(){ return Array.from(selected); }
 
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        menu.classList.toggle("open");
-      });
-
+      btn.addEventListener("click", (e) => { e.stopPropagation(); menu.classList.toggle("open"); });
       document.addEventListener("click", () => menu.classList.remove("open"));
 
       itemsEl.addEventListener("change", (e) => {
@@ -607,33 +561,166 @@
         onChange?.(getSelected());
       });
 
-      btnAll.addEventListener("click", (e) => {
-        e.preventDefault();
-        selected = new Set(options);
-        render();
-        onChange?.(getSelected());
-      });
-
-      btnNone.addEventListener("click", (e) => {
-        e.preventDefault();
-        selected = new Set();
-        render();
-        onChange?.(getSelected());
-      });
-
+      btnAll.addEventListener("click", (e) => { e.preventDefault(); selected = new Set(options); render(); onChange?.(getSelected()); });
+      btnNone.addEventListener("click", (e) => { e.preventDefault(); selected = new Set(); render(); onChange?.(getSelected()); });
       search.addEventListener("input", render);
 
       return { setOptions, setSelected, getSelected };
     }
 
-    const msLo = createMultiSelect(document.querySelector('[data-ms="lo"]'), { placeholder:"All LOs", onChange: () => {} });
-    const msPurpose = createMultiSelect(document.querySelector('[data-ms="purpose"]'), { placeholder:"All Purposes", onChange: () => {} });
-    const msRateType = createMultiSelect(document.querySelector('[data-ms="rateType"]'), { placeholder:"All Loan Types", onChange: () => {} });
-    const msMilestone = createMultiSelect(document.querySelector('[data-ms="milestone"]'), { placeholder:"All Milestones", onChange: () => {} });
-    msFolders = createMultiSelect(document.querySelector('[data-ms="folders"]'), {
-    placeholder: "Pipeline",
-    onChange: () => { btnRefresh.disabled = (msFolders.getSelected().length === 0); }
-  });
+    // -----------------------------
+    // Controls
+    // -----------------------------
+    const folderStatus = $("folderStatus");
+    const loStatus = $("loStatus");
+    const btnRefresh = $("btnRefresh");
+
+    let msFolders;
+
+    const msLo = createMultiSelect(
+      document.querySelector('[data-ms="lo"]'),
+      { placeholder: "All LOs", onChange: () => refresh().catch(e => log("Auto refresh error (LO change):", e.message)) }
+    );
+    const msAmort = createMultiSelect(
+      document.querySelector('[data-ms="amort"]'),
+      { placeholder: "All Amort Types", onChange: () => refresh().catch(e => log("Auto refresh error (Amort change):", e.message)) }
+    );
+    const msPurpose = createMultiSelect(
+      document.querySelector('[data-ms="purpose"]'),
+      { placeholder: "All Purposes", onChange: () => refresh().catch(e => log("Auto refresh error (Purpose change):", e.message)) }
+    );
+    const msRateType = createMultiSelect(
+      document.querySelector('[data-ms="rateType"]'),
+      { placeholder: "All Loan Types", onChange: () => refresh().catch(e => log("Auto refresh error (Loan Type change):", e.message)) }
+    );
+    const msMilestone = createMultiSelect(
+      document.querySelector('[data-ms="milestone"]'),
+      { placeholder: "All Milestones", onChange: () => refresh().catch(e => log("Auto refresh error (Milestone change):", e.message)) }
+    );
+
+    msFolders = createMultiSelect(
+      document.querySelector('[data-ms="folders"]'),
+      {
+        placeholder: "Select Folder",
+        onChange: () => {
+          const hasFolders = msFolders.getSelected().length > 0;
+          btnRefresh.disabled = !hasFolders;
+          if (hasFolders) refresh().catch(e => log("Auto refresh error (Folder change):", e.message));
+        }
+      }
+    );
+
+    // -----------------------------
+    // Folder loading
+    // -----------------------------
+    function extractFolders(payload){
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload?.loanFolders)) return payload.loanFolders;
+      if (Array.isArray(payload?.items)) return payload.items;
+      return [];
+    }
+    const folderName = (f) => (f?.folderName || f?.name || f?.FolderName || f?.Name || "").trim();
+
+    async function loadFolders(){
+      folderStatus.textContent = "Loading…";
+      btnRefresh.disabled = true;
+
+      const token = await getAccessToken();
+      const url = `${API_SERVER}/encompass/v3/loanFolders?start=0&limit=2000`;
+
+      log("GET folders:", url);
+
+      const r = await fetch(url, { headers:{ Authorization:`Bearer ${token}` } });
+      const text = await r.text();
+
+      if (!r.ok){
+        folderStatus.textContent = "Failed ❌";
+        log("Folders error status:", r.status);
+        log("Folders error body:", text.slice(0, 2000));
+        throw new Error(`loanFolders failed (${r.status})`);
+      }
+
+      let json;
+      try { json = JSON.parse(text); } catch { throw new Error("loanFolders returned non-JSON"); }
+
+      const folders = extractFolders(json).map(folderName).filter(Boolean);
+      const unique = Array.from(new Set(folders)).sort((a,b)=>a.localeCompare(b));
+
+      folderStatus.textContent = "Ready ✅";
+      msFolders.setOptions(unique);
+
+      // default to Pipeline selected if present
+      const pipeline = unique.find(n => n.toLowerCase() === "pipeline");
+      if (pipeline) msFolders.setSelected([pipeline]);
+
+      btnRefresh.disabled = (msFolders.getSelected().length === 0);
+    }
+
+    // -----------------------------
+    // Loan Officer loading (NEW)
+    // -----------------------------
+    function extractUsers(payload){
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload?.items)) return payload.items;
+      if (Array.isArray(payload?.users)) return payload.users;
+      return [];
+    }
+
+    function userHasLoanOfficerPersona(u){
+      const personas = Array.isArray(u?.personas) ? u.personas : [];
+      return personas.some(p => String(p?.entityName || "").toLowerCase() === "loan officer");
+    }
+
+    async function loadLoanOfficers(){
+      loStatus.textContent = "Loading…";
+
+      const token = await getAccessToken();
+
+      // NOTE: some tenants may paginate; we’ll loop safely
+      const limit = 1000;
+      let start = 0;
+      let all = [];
+
+      while (true){
+        const url = `${API_SERVER}/encompass/v1/company/users?start=${start}&limit=${limit}`;
+        log("GET company users:", url);
+
+        const r = await fetch(url, { headers:{ Authorization:`Bearer ${token}` } });
+        const text = await r.text();
+
+        if (!r.ok){
+          loStatus.textContent = "Failed ❌";
+          log("Users error status:", r.status);
+          log("Users error body:", text.slice(0, 2000));
+          throw new Error(`company/users failed (${r.status})`);
+        }
+
+        let json;
+        try { json = JSON.parse(text); } catch { throw new Error("company/users returned non-JSON"); }
+
+        const chunk = extractUsers(json);
+        all = all.concat(chunk);
+
+        // stop if chunk smaller than limit or no chunk
+        if (!chunk.length || chunk.length < limit) break;
+        start += limit;
+
+        // safety brake (avoid runaway)
+        if (start > 20000) break;
+      }
+
+      const los = all
+        .filter(userHasLoanOfficerPersona)
+        .map(u => String(u?.fullName || "").trim())
+        .filter(Boolean);
+
+      const unique = Array.from(new Set(los)).sort((a,b)=>a.localeCompare(b));
+      msLo.setOptions(unique);
+
+      loStatus.textContent = `Ready ✅ (${unique.length})`;
+      log("Loan Officers loaded:", unique.length);
+    }
+
     // -----------------------------
     // Pipeline fetch
     // -----------------------------
@@ -647,8 +734,8 @@
     }
 
     async function fetchPipelineLoans({ token, folderNames, limit, fields }){
-    const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
-    const body = { fields, loanFolders: (folderNames || []).filter(Boolean) };
+      const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
+      const body = { fields, loanFolders: (folderNames || []).filter(Boolean) };
 
       log("POST pipeline:", url);
       log("Body:", body);
@@ -681,12 +768,12 @@
     // -----------------------------
     // Chart rendering (simple bars)
     // -----------------------------
-    function barChart(canvasId, entries, { maxBars=12 }={}){
+    function barChart(canvasId, entries, { maxBars=12, valueFormat=null } = {}){
       const c = $(canvasId);
       if (!c) return;
 
       const parentW = c.parentElement?.clientWidth || 900;
-      c.width = Math.max(420, parentW - 20);
+      c.width = Math.max(520, parentW - 20);
 
       const ctx = c.getContext("2d");
       const w = c.width;
@@ -700,12 +787,12 @@
         return;
       }
 
-      const vals = top.map(e => e[1]);
+      const vals = top.map(e => Number(e[1]) || 0);
       const maxVal = Math.max(...vals, 1);
 
       const pad = 26;
       const gap = 10;
-      const bw = Math.max(10, (w - pad*2 - gap*(top.length-1)) / top.length);
+      const bw = Math.max(14, (w - pad*2 - gap*(top.length-1)) / top.length);
       const base = h - pad;
 
       ctx.beginPath();
@@ -720,9 +807,11 @@
         const y = base - bh;
 
         ctx.fillRect(x, y, bw, bh);
-        ctx.fillText(String(v), x, Math.max(12, y - 6));
 
-        const short = String(label).length > 18 ? String(label).slice(0,18)+"…" : String(label);
+        const t = valueFormat ? valueFormat(v) : (Number.isInteger(v) ? String(v) : v.toFixed(1));
+        ctx.fillText(t, x, Math.max(12, y - 6));
+
+        const short = String(label).length > 22 ? String(label).slice(0,22)+"…" : String(label);
         ctx.fillText(short, x, h - 10);
       });
     }
@@ -735,38 +824,36 @@
       loansFiltered: [],
       lastSnapshotKey: "kpi:lastSnapshot",
       viewKey: "kpi:views",
-      drill: {}, // kpiName -> loan list
-      drillRateBucket: {} // bucket -> loan list
+      drill: {},
+      drillRateBucket: {}
     };
 
     function getField(loan, key){
       return loan?.fields?.[key] ?? loan?.[key] ?? null;
     }
 
-    // ✅ Bucket logic: HELOC never counted as Conventional (even if cash out)
     function classifyRateBucket(loanType1172, purpose19){
       const lt = String(loanType1172 ?? "").trim().toLowerCase();
       const p  = String(purpose19 ?? "").trim().toLowerCase();
 
       if (!lt && !p) return "";
-
-      // hard rule first
       if (lt.includes("heloc")) return "HELOC";
-
-      // common buckets from loan type
       if (lt.includes("fha")) return "FHA";
       if (lt.includes("va")) return "VA";
       if (lt.includes("usda")) return "USDA";
       if (lt.includes("jumbo")) return "Jumbo";
-
       if (lt.includes("conventional") || lt.includes("conv")) return "Conventional";
-
-      // fallback heuristics (optional)
       if (p.includes("purchase")) return "Conventional";
       if (p.includes("refi") || p.includes("refinance") || p.includes("cash out")) return "Conventional";
-
       return "Other";
     }
+
+    // Milestone date fields (REQUESTED)
+    // NOTE: We cannot confirm syntax in your tenant from here. If blank, validate field names and update these constants.
+    const MS_DATE_LOAN_APP = "Fields.Log.MS.Date.Loan App";
+    const MS_DATE_PROCESSING = "Fields.Log.MS.Date.Processing";
+    $("msFieldLoanApp").textContent = MS_DATE_LOAN_APP;
+    $("msFieldProcessing").textContent = MS_DATE_PROCESSING;
 
     function normalizeLoan(loan){
       const loanNumber = safe(getField(loan, "Loan.LoanNumber") ?? loan?.LoanNumber ?? loan?.loanNumber, "");
@@ -774,19 +861,21 @@
 
       const lo = safe(getField(loan, "Fields.317") ?? getField(loan, "Loan.LoanOfficer") ?? getField(loan, "Loan.LoanOfficerName"), "Unassigned");
 
-      // ✅ Requirement #1: do not pull Unknown for Fields.19 / Fields.1172
       const purposeRaw = normStr(getField(loan, "Fields.19") ?? getField(loan, "Loan.LoanPurpose"));
       const milestone = safe(getField(loan, "Fields.Log.MS.CurrentMilestone") ?? getField(loan, "Loan.MilestoneName") ?? loan?.MilestoneName, "Unknown");
 
       const appDate = parseDate(getField(loan, "Fields.745"));
       const discDate = parseDate(getField(loan, "Fields.3142"));
       const closeDate = parseDate(getField(loan, "Fields.748"));
+      const uwDate = parseDate(getField(loan, "Fields.2301"));
 
-      const uwField = $("uwField").value.trim();
-      const uwDate = uwField ? parseDate(getField(loan, uwField)) : null;
+      const amortType = normStr(getField(loan, "Fields.608"));
 
       const rateField = $("rateTypeField").value.trim() || "Fields.1172";
       const loanTypeRaw = normStr(getField(loan, rateField));
+
+      const msLoanAppDate = parseDate(getField(loan, MS_DATE_LOAN_APP));
+      const msProcessingDate = parseDate(getField(loan, MS_DATE_PROCESSING));
 
       const rateBucket = classifyRateBucket(loanTypeRaw, purposeRaw);
 
@@ -794,23 +883,27 @@
         loanNumber,
         amt,
         lo,
-        purpose: purposeRaw,     // may be ""
-        loanType: loanTypeRaw,   // may be ""
-        rateBucket,              // bucket string
+        amortType,
+        purpose: purposeRaw,
+        loanType: loanTypeRaw,
+        rateBucket,
         milestone,
         appDate, discDate, closeDate, uwDate,
+        msLoanAppDate, msProcessingDate,
         _raw: loan
       };
     }
 
     function applyFilters(loans){
       const selLO = new Set(msLo.getSelected());
+      const selAmort = new Set(msAmort.getSelected());
       const selPurpose = new Set(msPurpose.getSelected());
       const selLoanType = new Set(msRateType.getSelected());
       const selMs = new Set(msMilestone.getSelected());
 
       return loans.filter(l => {
         if (selLO.size && !selLO.has(l.lo)) return false;
+        if (selAmort.size && !selAmort.has(l.amortType)) return false;
         if (selPurpose.size && !selPurpose.has(l.purpose)) return false;
         if (selLoanType.size && !selLoanType.has(l.loanType)) return false;
         if (selMs.size && !selMs.has(l.milestone)) return false;
@@ -856,7 +949,6 @@
       const uniqueLOs = loSet.size;
 
       const { start, end } = monthWindow();
-
       const appsMTDLoans = loans.filter(l => l.appDate && l.appDate >= start && l.appDate < end);
       const appsMTD = appsMTDLoans.length;
 
@@ -880,7 +972,7 @@
       const avgAppToUW   = avg(appToUWList);
       const avgAppToClose= avg(appToCloseList);
 
-      // ✅ purpose distribution excluding unknown/blank
+      // purpose distribution excluding unknown/blank
       const byPurpose = {};
       for (const l of loans){
         if (!l.purpose) continue;
@@ -893,8 +985,6 @@
       const byMilestone = {};
       const byLO = {};
       const volByLO = {};
-
-      // ✅ bucketed mix for Rate Type list + drill
       const byRateBucket = {};
       const drillRateBucket = {};
 
@@ -915,6 +1005,30 @@
       const rateBucketEntries = sortEntries(byRateBucket);
 
       state.drillRateBucket = drillRateBucket;
+
+      // Turn time calculations (requested)
+      const submitToAppComplete = loans
+        .map(l => daysBetween(l.appDate, l.msLoanAppDate))
+        .filter(d => Number.isFinite(d) && d >= 0);
+
+      const appToProcessing = loans
+        .map(l => daysBetween(l.msLoanAppDate, l.msProcessingDate))
+        .filter(d => Number.isFinite(d) && d >= 0);
+
+      const avgSubmitToAppComplete = avg(submitToAppComplete);
+      const avgAppToProcessing = avg(appToProcessing);
+
+      // Placeholder for future milestone calcs (keep commented so we can add 6–8 more cleanly)
+      /*
+      // Example future calcs:
+      // Label = Processing → Underwriting
+      // Days = Fields.Log.MS.Date.Underwriting - Fields.Log.MS.Date.Processing
+      // const MS_DATE_UNDERWRITING = "Fields.Log.MS.Date.Underwriting";
+      // const procToUw = loans
+      //   .map(l => daysBetween(l.msProcessingDate, parseDate(getField(l._raw, MS_DATE_UNDERWRITING))))
+      //   .filter(d => Number.isFinite(d) && d >= 0);
+      // const avgProcToUw = avg(procToUw);
+      */
 
       state.drill = {
         pipelineUnits: loans,
@@ -939,7 +1053,12 @@
         topPurpose, topPurposeShare,
         milestoneEntries, loEntries, volByLO,
         purposeEntries,
-        rateBucketEntries
+        rateBucketEntries,
+        // turn times (new)
+        avgSubmitToAppComplete,
+        avgAppToProcessing,
+        submitToAppCount: submitToAppComplete.length,
+        appToProcCount: appToProcessing.length
       };
     }
 
@@ -988,7 +1107,7 @@
       );
     }
 
-    function renderList(elId, entries, { topN=10, volByKey=null, onClickKey=null }={}){
+    function renderList(elId, entries, { topN=10, volByKey=null, onClickKey=null } = {}){
       const el = $(elId);
       if (!el) return;
       if (!entries.length){ el.textContent = "—"; return; }
@@ -1028,16 +1147,32 @@
 
       barChart("c_purpose", k.purposeEntries, { maxBars: 14 });
 
-      // ✅ Requirement #3: Rate Type Mix list is drillable
+      // Turn times chart (NEW)
+      const turnEntries = [
+        ["Loan Submit → Loan App Complete", k.avgSubmitToAppComplete],
+        ["Loan App → Processing", k.avgAppToProcessing]
+      ].filter(e => Number.isFinite(e[1]));
+
+      barChart("c_turnTimes", turnEntries, {
+        maxBars: 10,
+        valueFormat: (v) => v.toFixed(1) + "d"
+      });
+
+      if (!turnEntries.length){
+        log("Turn Times: no usable data found for milestone date fields. Verify field syntax:");
+        log("  ", MS_DATE_LOAN_APP);
+        log("  ", MS_DATE_PROCESSING);
+      } else {
+        log("Turn Times sample counts:",
+          { submitToAppCount: k.submitToAppCount, appToProcCount: k.appToProcCount }
+        );
+      }
+
       renderList("rateTypeList", k.rateBucketEntries, {
         topN: 12,
         onClickKey: (bucket) => {
           const loans = state.drillRateBucket[bucket] || [];
-          openModal({
-            title: `Rate Type Mix: ${bucket}`,
-            subtitle: `${loans.length} loans`,
-            loans
-          });
+          openModal({ title: `Rate Type Mix: ${bucket}`, subtitle: `${loans.length} loans`, loans });
         }
       });
 
@@ -1068,11 +1203,12 @@
           const ms = safe(l.milestone, "—");
           const purpose = l.purpose ? l.purpose : "—";
           const loanType = l.loanType ? l.loanType : "—";
+          const amort = l.amortType ? l.amortType : "—";
           return `
             <div class="list-item">
               <div>
                 <b class="mono">${escapeHtml(num || "(no loan #)")}</b>
-                <div class="badge">${escapeHtml(l.lo)} • ${escapeHtml(purpose)} • ${escapeHtml(loanType)} • ${escapeHtml(ms)} • App: ${escapeHtml(app)}</div>
+                <div class="badge">${escapeHtml(l.lo)} • ${escapeHtml(amort)} • ${escapeHtml(purpose)} • ${escapeHtml(loanType)} • ${escapeHtml(ms)} • App: ${escapeHtml(app)}</div>
               </div>
               <div class="right"><b>${escapeHtml(amt)}</b></div>
             </div>
@@ -1107,11 +1243,7 @@
 
       const key = tile.getAttribute("data-kpi");
       const loans = state.drill[key] || [];
-      openModal({
-        title: `Drill-through: ${key}`,
-        subtitle: `${loans.length} loans`,
-        loans
-      });
+      openModal({ title: `Drill-through: ${key}`, subtitle: `${loans.length} loans`, loans });
     });
 
     // -----------------------------
@@ -1121,9 +1253,7 @@
       try { return JSON.parse(localStorage.getItem(state.viewKey) || "[]"); }
       catch { return []; }
     }
-    function setViews(v){
-      localStorage.setItem(state.viewKey, JSON.stringify(v || []));
-    }
+    function setViews(v){ localStorage.setItem(state.viewKey, JSON.stringify(v || [])); }
 
     function captureView(){
       return {
@@ -1131,10 +1261,10 @@
         folders: msFolders?.getSelected?.() || [],
         limit: $("limit").value,
         ageDays: $("ageDays").value,
-        uwField: $("uwField").value,
         rateTypeField: $("rateTypeField").value,
         filters: {
           lo: msLo.getSelected(),
+          amort: msAmort.getSelected(),
           purpose: msPurpose.getSelected(),
           rateType: msRateType.getSelected(),
           milestone: msMilestone.getSelected()
@@ -1145,23 +1275,18 @@
     function applyView(v){
       if (!v) return;
 
-      // ✅ Folder(s) now come from multi-select
-      if (Array.isArray(v.folders) && msFolders){
-        msFolders.setSelected(v.folders);
-      }
+      if (Array.isArray(v.folders) && msFolders) msFolders.setSelected(v.folders);
 
       $("limit").value = v.limit ?? $("limit").value;
       $("ageDays").value = v.ageDays ?? $("ageDays").value;
-      $("uwField").value = v.uwField ?? $("uwField").value;
       $("rateTypeField").value = v.rateTypeField ?? $("rateTypeField").value;
 
-      // options must already be loaded; setSelected will ignore invalids
       msLo.setSelected(v.filters?.lo || []);
+      msAmort.setSelected(v.filters?.amort || []);
       msPurpose.setSelected(v.filters?.purpose || []);
       msRateType.setSelected(v.filters?.rateType || []);
       msMilestone.setSelected(v.filters?.milestone || []);
 
-      // ✅ Refresh enabled only if at least one folder is selected
       btnRefresh.disabled = (msFolders.getSelected().length === 0);
     }
 
@@ -1203,31 +1328,42 @@
       const token = await getAccessToken();
       const limit = Math.max(1, Math.min(1000, Number($("limit").value || 1000)));
 
-      const uwField = $("uwField").value.trim();
+      const uwField = "Fields.2301";
       const rateField = $("rateTypeField").value.trim() || "Fields.1172";
 
+      // Fields needed for:
+      // - existing KPIs
+      // - Amortization filter (608)
+      // - milestone turn times chart (MS_DATE_LOAN_APP / MS_DATE_PROCESSING)
       const fields = [
         "Loan.LoanNumber",
         "Loan.LoanAmount",
         "Fields.317",
+        "Fields.608",
         "Fields.19",
         "Fields.Log.MS.CurrentMilestone",
         "Fields.745",
         "Fields.3142",
         "Fields.748",
+        uwField,
         rateField,
-        uwField
+        MS_DATE_LOAN_APP,
+        MS_DATE_PROCESSING
       ].filter(Boolean);
 
       const raw = await fetchPipelineLoans({ token, folderNames: folders, limit, fields });
       const normalized = raw.map(normalizeLoan);
 
-      const uniq = (arr) => Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b)));
+      const uniq = (arr) => Array.from(new Set(arr.filter(Boolean)))
+        .sort((a,b)=>String(a).localeCompare(String(b)));
 
-      // ✅ Requirement #1: exclude Unknown/blank for 19 & 1172 options
-      msLo.setOptions(uniq(normalized.map(l => l.lo).filter(v => v && v.toLowerCase() !== "unknown")));
-      msPurpose.setOptions(uniq(normalized.map(l => l.purpose)));     // already excludes unknown via normStr
-      msRateType.setOptions(uniq(normalized.map(l => l.loanType)));   // already excludes unknown via normStr
+      // IMPORTANT:
+      // - Loan Officers are NOT populated from pipeline anymore.
+      // - msLo options come from /company/users (loadLoanOfficers)
+      // - So here we only populate other filters from current data.
+      msAmort.setOptions(uniq(normalized.map(l => l.amortType)));
+      msPurpose.setOptions(uniq(normalized.map(l => l.purpose)));
+      msRateType.setOptions(uniq(normalized.map(l => l.loanType)));
       msMilestone.setOptions(uniq(normalized.map(l => l.milestone)));
 
       const filtered = applyFilters(normalized);
@@ -1277,8 +1413,13 @@
     (async function init(){
       try{
         await loadFolders();
+        await loadLoanOfficers();
+
+        // initial refresh if Pipeline auto-selected
+        if (msFolders.getSelected().length){
+          refresh().catch(e => log("Auto refresh error:", e.message));
+        }
       }catch(e){
-        folderStatus.textContent = "Failed ❌";
         log("Init error:", e.message);
       }
     })();
