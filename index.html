@@ -37,7 +37,7 @@
   <div class="card">
     <h2>Loan KPI Dashboard</h2>
     <div class="muted">
-      Top section = current open loan (SSF <code>loan</code>). Bottom section = pipeline KPIs (REST API via token exchange).
+      Top section = current open loan (SSF <code>loan</code>). Bottom section = pipeline KPIs (V1 <code>/encompass/v1/loanPipeline</code> via token exchange).
     </div>
 
     <div class="bar">
@@ -98,22 +98,19 @@
 
   <!-- Pipeline KPIs -->
   <div class="card" style="margin-top:12px;">
-    <h2 style="margin-bottom:2px;">Pipeline KPIs (Minimal)</h2>
-    <div class="muted">Counts + totals from <code>/encompass/v1/loanPipeline</code>.</div>
+    <h2 style="margin-bottom:2px;">Pipeline KPIs (Folder)</h2>
+    <div class="muted">
+      Filter: <code>LoanFolder.FolderName</code> only. KPI grouping uses <code>Fields.Log.MS.CurrentMilestone</code>.
+    </div>
 
     <div class="grid" style="margin-top:12px;">
       <div class="card">
-        <div class="kpi-label">Filter Mode</div>
-        <div class="row" style="margin-top:6px;">
-          <select id="pipeMode" class="input">
-            <option value="all">ALL Loans (diagnostic)</option>
-            <option value="myLoans">All Accessible Loans</option>
-            <option value="folder">Folder</option>
-          </select>
+        <div class="kpi-label">Folder Filter</div>
 
+        <div class="row" style="margin-top:6px;">
           <div class="field" style="min-width:260px;">
             <label class="muted" for="pipeFolder">Folder name (exact)</label>
-            <input id="pipeFolder" class="input" placeholder='e.g. "Active Loans"' value="Pipeline" />
+            <input id="pipeFolder" class="input" placeholder='e.g. "Pipeline"' value="Pipeline" />
           </div>
 
           <div class="field" style="min-width:140px;">
@@ -121,8 +118,9 @@
             <input id="pipeLimit" class="input" type="number" min="1" max="500" value="25" />
           </div>
         </div>
+
         <div class="muted" style="margin-top:8px;">
-          Tip: start with <b>ALL Loans (diagnostic)</b>. If that returns data, then switch to <b>Folder</b> once you know the exact folder name.
+          Note: V1 <code>canonicalName</code> maps to <code>criterionFieldName</code>. We request <code>Fields.Log.MS.CurrentMilestone</code> but do not filter on it.
         </div>
       </div>
 
@@ -139,9 +137,9 @@
       </div>
 
       <div class="card warn">
-        <div class="kpi-label">By Status</div>
+        <div class="kpi-label">By Milestone</div>
         <div class="kpi-value" style="font-size:14px; font-weight:600;" id="pipeByStatus">—</div>
-        <div class="kpi-sub">Grouped by milestone/status</div>
+        <div class="kpi-sub">Grouped by CurrentMilestone</div>
       </div>
     </div>
   </div>
@@ -159,18 +157,12 @@
     const debugEl = document.getElementById("debug");
     const log = (...args) => {
       const line = args.map(a => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
-      try {
-        debugEl.textContent += (debugEl.textContent ? "\n" : "") + line;
-      } catch {}
+      try { debugEl.textContent += (debugEl.textContent ? "\n" : "") + line; } catch {}
       try { console.log("[KPI]", ...args); } catch {}
     };
 
-    window.addEventListener("error", (e) => {
-      log("WINDOW ERROR:", e.message, `${e.filename || ""}:${e.lineno || ""}`);
-    });
-    window.addEventListener("unhandledrejection", (e) => {
-      log("UNHANDLED PROMISE REJECTION:", e.reason?.message || String(e.reason));
-    });
+    window.addEventListener("error", (e) => log("WINDOW ERROR:", e.message, `${e.filename || ""}:${e.lineno || ""}`));
+    window.addEventListener("unhandledrejection", (e) => log("UNHANDLED PROMISE REJECTION:", e.reason?.message || String(e.reason)));
 
     // Build stamp (helps verify cache/version)
     const BUILD = "2026-02-26T00:00:00Z";
@@ -253,7 +245,7 @@
         const loanNum = await loan.getField("364");
         const amt     = await loan.getField("1109");
         const rate    = await loan.getField("3");
-        const status  = await loan.getField("1393"); // Status label
+        const status  = await loan.getField("1393");
         const purpose = await loan.getField("19");
         const bFirst  = await loan.getField("4000");
         const bLast   = await loan.getField("4002");
@@ -300,12 +292,8 @@
       const auth = await withTimeout(elli.script.getObject("auth"), 12000, "auth object");
       const tok = await withTimeout(auth.getAccessToken(), 12000, "getAccessToken");
 
-      // If it's already an access token object, use it
-      if (tok && typeof tok === "object" && tok.access_token) {
-        return tok.access_token;
-      }
+      if (tok && typeof tok === "object" && tok.access_token) return tok.access_token;
 
-      // Otherwise treat as auth code and exchange
       const authCode = String(tok || "");
       if (!authCode) throw new Error("Auth token/auth code missing");
 
@@ -329,54 +317,26 @@
     let refreshingPipe = false;
 
     function setPipelineButtonsEnabled(enabled) {
-      const btn = document.getElementById("btnPipeline");
-      btn.disabled = !enabled;
+      document.getElementById("btnPipeline").disabled = !enabled;
     }
 
-    function buildPipelineFilter() {
-      const mode = document.getElementById("pipeMode").value;
+    // Filter ONLY by folder (per your requirement)
+    function buildPipelineFilterFolderOnly() {
+      const folder = String(document.getElementById("pipeFolder").value || "").trim();
+      if (!folder) throw new Error("Folder filter is required.");
 
-      // Broad filter (works for both diagnostic + "All Accessible Loans")
-      if (mode === "all" || mode === "myLoans") {
-        return {
-          operator: "and",
-          terms: [{
-            canonicalName: "Loan.LoanNumber",
-            matchType: "isNotEmpty",
-            include: true
-          }]
-        };
-      }
-
-      // Folder mode
-      if (mode === "folder") {
-        const folder = String(document.getElementById("pipeFolder").value || "").trim();
-        if (!folder) throw new Error("Folder mode selected, but folder name is blank.");
-
-        return {
-          operator: "and",
-          terms: [{
-            canonicalName: "LoanFolder.FolderName",
-            value: folder,
-            matchType: "exact",
-            include: true
-          }]
-        };
-      }
-
-      // Fallback (shouldn't hit)
       return {
         operator: "and",
         terms: [{
-          canonicalName: "Loan.LoanNumber",
-          matchType: "isNotEmpty",
+          canonicalName: "LoanFolder.FolderName",
+          value: folder,
+          matchType: "exact",
           include: true
         }]
       };
     }
 
     function getLoanGuidFromPipelineItem(item) {
-      // Defensive: tenant/version differences
       return (
         item?.loanGuid ||
         item?.loanId ||
@@ -399,13 +359,15 @@
         const limit = Math.max(1, Math.min(500, Number(document.getElementById("pipeLimit").value || 25)));
         const url = `https://api.elliemae.com/encompass/v1/loanPipeline?limit=${limit}`;
 
-        const filter = buildPipelineFilter();
+        const filter = buildPipelineFilterFolderOnly();
 
+        // IMPORTANT: V1 canonicalName uses criterionFieldName values for "Fields.*" items.
+        // We request CurrentMilestone but do NOT filter on it.
         const body = {
           filter,
           fields: [
-            "Loan.LoanAmount",
-            "Loan.MilestoneName",
+            "Fields.1109",
+            "Fields.Log.MS.CurrentMilestone",
             "LoanFolder.FolderName"
           ]
         };
@@ -437,16 +399,16 @@
           const g = getLoanGuidFromPipelineItem(l);
           if (g) uniqueGuids.add(g);
         }
-
-        const uniqueCount = uniqueGuids.size || loans.length; // fallback if no GUIDs present
+        const uniqueCount = uniqueGuids.size || loans.length;
         log(`Loans returned (unique by GUID): ${uniqueCount}`);
 
         // KPI calculations
         let total = 0;
-        const byStatus = {};
+        const byMilestone = {};
 
         for (const l of loans) {
           const amtVal =
+            l?.fields?.["Fields.1109"] ??
             l?.fields?.["Loan.LoanAmount"] ??
             l?.LoanAmount ??
             l?.loanAmount ??
@@ -455,34 +417,33 @@
           const amt = Number(String(amtVal ?? "").replace(/,/g, ""));
           if (isFinite(amt)) total += amt;
 
-          const statusRaw =
+          const msRaw =
+            l?.fields?.["Fields.Log.MS.CurrentMilestone"] ??
             l?.fields?.["Loan.MilestoneName"] ??
             l?.MilestoneName ??
             l?.milestoneName ??
             "";
 
-          const status = String(statusRaw).trim() || "Unknown";
-          byStatus[status] = (byStatus[status] || 0) + 1;
+          const ms = String(msRaw).trim() || "Unknown";
+          byMilestone[ms] = (byMilestone[ms] || 0) + 1;
         }
 
         document.getElementById("pipeCount").textContent = String(uniqueCount);
         document.getElementById("pipeTotal").textContent = formatMoney(total);
 
-        const byStatusText = Object.entries(byStatus)
+        const byText = Object.entries(byMilestone)
           .sort((a,b) => b[1] - a[1])
           .map(([k, v]) => `${k}: ${v}`)
           .join(" | ");
 
-        document.getElementById("pipeByStatus").textContent = byStatusText || "—";
+        document.getElementById("pipeByStatus").textContent = byText || "—";
 
         log("Pipeline KPIs refreshed ✅");
 
         if (loans.length === 0) {
-          const mode = document.getElementById("pipeMode").value;
           log("No loans returned. Notes:");
-          log("- If mode is 'folder', folder name must match exactly and user must have access + pipeline visibility.");
-          log("- If mode is 'all'/'myLoans' and still 0, this points to token context / permissions / pipeline visibility.");
-          log("Current mode:", mode);
+          log("- Folder name must match exactly and user must have access + pipeline visibility to that folder.");
+          log("- If Postman returns loans but this tool does not, compare tokens/scopes and the API server/instance.");
         }
       } catch (e) {
         log("Pipeline KPI ERROR:", e.message);
