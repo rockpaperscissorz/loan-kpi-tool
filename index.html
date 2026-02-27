@@ -866,9 +866,17 @@
       const closeDate = parseDate(getField(loan, "Fields.748"));
       const uwDate = parseDate(getField(loan, "Fields.2301"));
 
-      const startedDate = parseDate(getField(loan, "Fields.Log.MS.Date.Started"));
-      const msLoanAppDate = parseDate(getField(loan, MS_DATE_LOAN_APP));
-      const msProcessingDate = parseDate(getField(loan, MS_DATE_PROCESSING));
+      const startedDate = parseDate(
+        getField(loan, "Fields.Log.MS.Date.Started")
+      );
+
+      const msLoanAppDate = parseDate(
+        getField(loan, "Fields.Log.MS.Date.Loan App")
+      );
+
+      const msProcessingDate = parseDate(
+        getField(loan, "Fields.Log.MS.Date.Processing")
+      );
 
       const rateBucket = classifyRateBucket(loanType, purpose);
 
