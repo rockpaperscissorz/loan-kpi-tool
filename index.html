@@ -5,190 +5,435 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Pipeline KPI Dashboard</title>
 
-  <!-- SSF guest library -->
+  <!-- SSF guest library (CDN) -->
   <script src="https://cdn.elliemae.io/elliemae/core/ssf/1.0/elli.ssf.guest-with-polyfill.js"></script>
 
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
     h2 { margin: 0 0 6px; }
     .muted { opacity: 0.75; font-size: 12px; }
-    .btn { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    .bar { display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top: 12px; }
+    .btn  { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .pill { padding: 4px 10px; border-radius: 999px; border: 1px solid #ddd; font-size: 12px; background: #fff; }
     .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 12px; }
     .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; background:#fff; }
     .kpi-label { font-size: 12px; opacity: 0.75; margin-bottom: 6px; }
-    .kpi-value { font-size: 22px; font-weight: 700; }
-    .warn { border: 1px solid #f0c36d; background:#fff7e6; }
+    .kpi-value { font-size: 22px; font-weight: 700; line-height: 1.15; word-break: break-word; }
+    .kpi-sub { margin-top: 6px; font-size: 12px; opacity: 0.75; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     pre { background:#f7f7f7; padding: 10px; border-radius: 10px; overflow:auto; }
+    code { background:#f7f7f7; padding:2px 6px; border-radius:6px; }
+    .warn { border: 1px solid #f0c36d; background:#fff7e6; }
+    .field { display:flex; flex-direction:column; gap:4px; }
+    .input, select {
+      padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background:#fff;
+      font-size: 14px;
+      min-width: 260px;
+    }
   </style>
 </head>
 
 <body>
+  <div class="card">
+    <h2>Pipeline KPI Dashboard</h2>
+    <div class="muted">
+      Folder list + selection uses V3 (<code>/encompass/v3/loanFolders</code>). KPIs use V1 (<code>/encompass/v1/loanPipeline</code>).
+      Filter includes <b>every loan in the selected folder</b> with no other conditions.
+    </div>
 
-<div class="card">
-  <h2>Pipeline KPI Dashboard</h2>
-  <div class="muted">
-    Folder name resolved via <code>V3 loanFolders</code>. KPIs pulled via <code>V1 loanPipeline</code>.
+    <div class="bar">
+      <div class="row">
+        <span class="pill"><b>SSF:</b> <span id="ssfStatus">Checking…</span></span>
+        <span class="pill"><b>Guest init:</b> <span id="guestStatus">Not started</span></span>
+        <span class="pill"><b>Folder list:</b> <span id="folderStatus">Not loaded</span></span>
+      </div>
+
+      <div class="row">
+        <button id="btnPipeline" class="btn" disabled>Refresh Pipeline KPIs</button>
+        <button id="btnClear" class="btn">Clear Debug</button>
+      </div>
+    </div>
   </div>
 
-  <div style="margin-top:10px;">
-    <button id="btnPipeline" class="btn">Refresh Pipeline KPIs</button>
+  <!-- Folder selector + Limit -->
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-bottom:2px;">Folder Selection</h2>
+    <div class="muted">Choose a folder from V3. We resolve its <code>folderName</code> and pass it to V1 as <code>LoanFolder.FolderName</code>.</div>
+
+    <div class="row" style="margin-top:10px;">
+      <div class="field">
+        <label class="muted" for="folderSelect">Loan folder</label>
+        <select id="folderSelect" class="input" disabled>
+          <option value="">Loading folders…</option>
+        </select>
+      </div>
+
+      <div class="field" style="min-width:140px;">
+        <label class="muted" for="pipeLimit">Limit</label>
+        <input id="pipeLimit" class="input" type="number" min="1" max="500" value="500" style="min-width:140px;" />
+      </div>
+    </div>
+
+    <div class="muted" style="margin-top:8px;">
+      Resolved folder name (used in V1 filter): <code id="resolvedFolderName">—</code>
+    </div>
   </div>
-</div>
 
-<div class="grid">
-  <div class="card warn">
-    <div class="kpi-label">Resolved Folder Name</div>
-    <div class="kpi-value" id="pipeFolderName">—</div>
+  <!-- Pipeline KPIs -->
+  <div class="grid" style="margin-top:12px;">
+    <div class="card warn">
+      <div class="kpi-label">Loans Returned</div>
+      <div class="kpi-value" id="pipeCount">—</div>
+      <div class="kpi-sub">Count of loans returned by V1</div>
+    </div>
+
+    <div class="card warn">
+      <div class="kpi-label">Total Loan Amount</div>
+      <div class="kpi-value" id="pipeTotal">—</div>
+      <div class="kpi-sub">Sum of returned loans’ amounts</div>
+    </div>
+
+    <div class="card warn">
+      <div class="kpi-label">By Milestone</div>
+      <div class="kpi-value" style="font-size:14px; font-weight:600;" id="pipeByStatus">—</div>
+      <div class="kpi-sub">Grouped by CurrentMilestone</div>
+    </div>
   </div>
 
-  <div class="card warn">
-    <div class="kpi-label">Loans Returned</div>
-    <div class="kpi-value" id="pipeCount">—</div>
+  <!-- Debug -->
+  <div class="card" style="margin-top:12px;">
+    <details open>
+      <summary>Debug output</summary>
+      <pre id="debug"></pre>
+    </details>
   </div>
 
-  <div class="card warn">
-    <div class="kpi-label">Total Loan Amount</div>
-    <div class="kpi-value" id="pipeTotal">—</div>
-  </div>
+  <script>
+    // ---------- Logging (console + on-page) ----------
+    const debugEl = document.getElementById("debug");
+    const log = (...args) => {
+      const line = args.map(a => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
+      try { debugEl.textContent += (debugEl.textContent ? "\n" : "") + line; } catch {}
+      try { console.log("[KPI]", ...args); } catch {}
+    };
 
-  <div class="card warn">
-    <div class="kpi-label">By Milestone</div>
-    <div id="pipeByStatus">—</div>
-  </div>
-</div>
+    window.addEventListener("error", (e) => log("WINDOW ERROR:", e.message, `${e.filename || ""}:${e.lineno || ""}`));
+    window.addEventListener("unhandledrejection", (e) => log("UNHANDLED PROMISE REJECTION:", e.reason?.message || String(e.reason)));
 
-<div class="card" style="margin-top:12px;">
-  <pre id="debug"></pre>
-</div>
+    // ---------- SSF status ----------
+    const ssfLoaded = (window.elli && elli.script);
+    document.getElementById("ssfStatus").textContent = ssfLoaded ? "Loaded ✅" : "NOT loaded ❌";
 
-<script>
-/* ---------------- Logging ---------------- */
-const debugEl = document.getElementById("debug");
-const log = (...a) => debugEl.textContent += a.join(" ") + "\n";
+    // ---------- Guest init (guarded: run once) ----------
+    (function initGuestOnce() {
+      if (!ssfLoaded) {
+        document.getElementById("guestStatus").textContent = "SSF not loaded ❌";
+        return;
+      }
+      if (window.__guestInited) {
+        document.getElementById("guestStatus").textContent = "Already initialized ✅";
+        log("guest.create skipped (already initialized) ✅");
+        return;
+      }
 
-/* ---------------- Auth (UNCHANGED) ---------------- */
-async function getUserAccessTokenForApi() {
-  const auth = await elli.script.getObject("auth");
-  const tok = await auth.getAccessToken();
+      try {
+        if (elli?.script?.guest?.create) {
+          window.__guestInited = true;
+          elli.script.guest.create("", document.head);
+          document.getElementById("guestStatus").textContent = "Initialized ✅";
+          log("guest.create('', document.head) called ✅");
+        } else {
+          document.getElementById("guestStatus").textContent = "guest.create not found ⚠️";
+          log("WARNING: elli.script.guest.create not found.");
+        }
+      } catch (e) {
+        document.getElementById("guestStatus").textContent = `Init failed ❌ (${e.message})`;
+        log("Guest init ERROR:", e.message);
+      }
+    })();
 
-  if (tok?.access_token) return tok.access_token;
-
-  const resp = await fetch("/api/exchange", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ authCode: tok })
-  });
-
-  const json = await resp.json();
-  return json.access_token;
-}
-
-/* ---------------- V3: Resolve Folder Name ---------------- */
-let resolvedFolderName = null;
-
-// 🔁 Replace this with your actual folder identifier (ID or known key)
-const LOAN_FOLDER_ID = "Pipeline";
-
-async function loadFolderNameFromV3() {
-  log("Resolving folder name via V3…");
-
-  const token = await getUserAccessTokenForApi();
-  const API_SERVER = "https://api.elliemae.com";
-
-  const resp = await fetch(
-    `${API_SERVER}/encompass/v3/loanFolders/${LOAN_FOLDER_ID}`,
-    {
-      headers: { Authorization: `Bearer ${token}` }
+    // ---------- Helpers ----------
+    function formatMoney(n) {
+      const num = Number(String(n ?? "").replace(/,/g, ""));
+      if (!isFinite(num)) return "—";
+      return num.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
     }
-  );
 
-  if (!resp.ok) {
-    throw new Error(`V3 loanFolders failed (${resp.status})`);
-  }
+    // ---------- Auth / Token exchange (UNCHANGED) ----------
+    async function getUserAccessTokenForApi() {
+      const auth = await elli.script.getObject("auth");
+      const tok = await auth.getAccessToken();
 
-  const json = await resp.json();
-  resolvedFolderName = json.folderName;
+      if (tok && typeof tok === "object" && tok.access_token) return tok.access_token;
 
-  document.getElementById("pipeFolderName").textContent = resolvedFolderName;
-  log("Resolved folder:", resolvedFolderName);
-}
+      const resp = await fetch("/api/exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ authCode: tok })
+      });
 
-/* ---------------- V1: Pipeline KPIs ---------------- */
-function buildPipelineFilter() {
-  return {
-    operator: "and",
-    terms: [{
-      canonicalName: "LoanFolder.FolderName",
-      value: resolvedFolderName,
-      matchType: "exact",
-      include: true
-    }]
-  };
-}
-
-async function refreshPipelineKpis() {
-  if (!resolvedFolderName) {
-    log("Folder name not resolved yet.");
-    return;
-  }
-
-  log("Refreshing pipeline KPIs…");
-  const token = await getUserAccessTokenForApi();
-
-  const resp = await fetch(
-    "https://api.elliemae.com/encompass/v1/loanPipeline?limit=500",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        filter: buildPipelineFilter(),
-        fields: [
-          "Fields.1109",
-          "Fields.Log.MS.CurrentMilestone"
-        ]
-      })
+      const json = await resp.json();
+      return json.access_token;
     }
-  );
 
-  const json = await resp.json();
-  const loans = json.items || [];
+    // ---------- API Server ----------
+    // If your environment uses a different API server, update this constant.
+    const API_SERVER = "https://api.elliemae.com";
 
-  let total = 0;
-  const byMilestone = {};
+    // ---------- Folder dropdown (V3) ----------
+    const folderSelect = document.getElementById("folderSelect");
+    const folderStatus = document.getElementById("folderStatus");
+    const resolvedFolderNameEl = document.getElementById("resolvedFolderName");
+    const btnPipeline = document.getElementById("btnPipeline");
 
-  for (const l of loans) {
-    const amt = Number(l.fields?.["Fields.1109"] || 0);
-    if (isFinite(amt)) total += amt;
+    let selectedFolderId = null;
+    let selectedFolderName = null;
 
-    const ms = l.fields?.["Fields.Log.MS.CurrentMilestone"] || "Unknown";
-    byMilestone[ms] = (byMilestone[ms] || 0) + 1;
-  }
+    function setFolderUiState({ loading, ready, message }) {
+      folderStatus.textContent = message || (loading ? "Loading…" : ready ? "Ready ✅" : "Not loaded");
+      folderSelect.disabled = !!loading || !ready;
+      btnPipeline.disabled = !ready || !selectedFolderName;
+    }
 
-  document.getElementById("pipeCount").textContent = loans.length;
-  document.getElementById("pipeTotal").textContent =
-    total.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+    // Attempt to normalize folder list shapes (V3 responses vary by env/version)
+    function extractFolderList(json) {
+      // common shapes: { loanFolders: [...] }, { items: [...] }, [...] (array)
+      if (Array.isArray(json)) return json;
+      if (Array.isArray(json?.loanFolders)) return json.loanFolders;
+      if (Array.isArray(json?.items)) return json.items;
+      if (Array.isArray(json?.folders)) return json.folders;
+      return [];
+    }
 
-  document.getElementById("pipeByStatus").textContent =
-    Object.entries(byMilestone).map(([k,v]) => `${k}: ${v}`).join(" | ") || "—";
+    function getFolderId(f) {
+      return f?.id || f?.folderId || f?.loanFolderId || f?.guid || f?.folderGuid || null;
+    }
 
-  log("Pipeline KPIs refreshed.");
-}
+    function getFolderName(f) {
+      return f?.folderName || f?.name || f?.FolderName || f?.Name || null;
+    }
 
-/* ---------------- Init ---------------- */
-document.getElementById("btnPipeline").addEventListener("click", refreshPipelineKpis);
+    async function loadFoldersIntoDropdown() {
+      setFolderUiState({ loading: true, ready: false, message: "Loading…" });
+      folderSelect.innerHTML = `<option value="">Loading folders…</option>`;
 
-(async function init() {
-  try {
-    await loadFolderNameFromV3();
-  } catch (e) {
-    log("INIT ERROR:", e.message);
-  }
-})();
-</script>
+      const token = await getUserAccessTokenForApi();
 
+      // V3 list endpoint
+      const url = `${API_SERVER}/encompass/v3/loanFolders?start=0&limit=2000`;
+      log("V3 loanFolders list GET:", url);
+
+      const resp = await fetch(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const text = await resp.text();
+      if (!resp.ok) {
+        log("V3 loanFolders list ERROR status:", String(resp.status));
+        log("V3 loanFolders list ERROR body:", text);
+        throw new Error(`V3 loanFolders list failed (${resp.status})`);
+      }
+
+      let json;
+      try { json = JSON.parse(text); }
+      catch { throw new Error("V3 loanFolders list returned non-JSON"); }
+
+      const folders = extractFolderList(json);
+      log(`V3 folders returned: ${folders.length}`);
+
+      const normalized = folders
+        .map(f => ({ id: getFolderId(f), name: getFolderName(f) }))
+        .filter(x => x.id && x.name)
+        .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+      if (!normalized.length) {
+        log("V3 folder list raw response:", json);
+        throw new Error("No folders found (or response shape not recognized).");
+      }
+
+      folderSelect.innerHTML =
+        `<option value="">Select a folder…</option>` +
+        normalized.map(x => `<option value="${String(x.id)}">${String(x.name)}</option>`).join("");
+
+      // Default-select "Pipeline" if present
+      const pipeline = normalized.find(x => String(x.name).toLowerCase() === "pipeline");
+      if (pipeline) {
+        folderSelect.value = String(pipeline.id);
+      }
+
+      setFolderUiState({ loading: false, ready: true, message: "Ready ✅" });
+
+      // Resolve selected folder immediately (if preselected)
+      if (folderSelect.value) {
+        await onFolderChanged();
+      }
+    }
+
+    async function resolveFolderNameById(folderId) {
+      const token = await getUserAccessTokenForApi();
+      const url = `${API_SERVER}/encompass/v3/loanFolders/${encodeURIComponent(String(folderId))}`;
+      log("V3 loanFolders detail GET:", url);
+
+      const resp = await fetch(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const text = await resp.text();
+      if (!resp.ok) {
+        log("V3 loanFolders detail ERROR status:", String(resp.status));
+        log("V3 loanFolders detail ERROR body:", text);
+        throw new Error(`V3 loanFolders detail failed (${resp.status})`);
+      }
+
+      let json;
+      try { json = JSON.parse(text); }
+      catch { throw new Error("V3 loanFolders detail returned non-JSON"); }
+
+      const name = json?.folderName || json?.name || json?.FolderName || json?.Name;
+      if (!name) {
+        log("V3 loanFolders detail raw response:", json);
+        throw new Error("Folder detail did not include folderName.");
+      }
+
+      return String(name).trim();
+    }
+
+    async function onFolderChanged() {
+      const folderId = folderSelect.value;
+      selectedFolderId = folderId || null;
+      selectedFolderName = null;
+      resolvedFolderNameEl.textContent = "—";
+      btnPipeline.disabled = true;
+
+      if (!selectedFolderId) {
+        log("Folder cleared.");
+        return;
+      }
+
+      try {
+        log("Folder selected (id):", selectedFolderId);
+        const name = await resolveFolderNameById(selectedFolderId);
+        selectedFolderName = name;
+        resolvedFolderNameEl.textContent = selectedFolderName;
+        btnPipeline.disabled = false;
+        log("Resolved folder name ✅:", selectedFolderName);
+      } catch (e) {
+        log("Folder resolve ERROR:", e.message);
+        resolvedFolderNameEl.textContent = `ERROR: ${e.message}`;
+        btnPipeline.disabled = true;
+      }
+    }
+
+    folderSelect.addEventListener("change", () => {
+      onFolderChanged();
+    });
+
+    // ---------- Pipeline KPIs (V1) ----------
+    function buildPipelineFilterFolderOnly() {
+      if (!selectedFolderName) throw new Error("Folder name not resolved.");
+      return {
+        operator: "and",
+        terms: [{
+          canonicalName: "LoanFolder.FolderName",
+          value: selectedFolderName,
+          matchType: "exact",
+          include: true
+        }]
+      };
+    }
+
+    async function refreshPipelineKpis() {
+      try {
+        if (!selectedFolderName) {
+          log("Folder name not resolved yet.");
+          return;
+        }
+
+        log("Refreshing pipeline KPIs… Folder:", selectedFolderName);
+
+        const token = await getUserAccessTokenForApi();
+        const limit = Math.max(1, Math.min(500, Number(document.getElementById("pipeLimit").value || 500)));
+
+        const url = `${API_SERVER}/encompass/v1/loanPipeline?start=0&limit=${limit}`;
+
+        const body = {
+          filter: buildPipelineFilterFolderOnly(),
+          fields: [
+            "Fields.1109",
+            "Fields.Log.MS.CurrentMilestone"
+          ]
+        };
+
+        log("V1 loanPipeline request body:", body);
+
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body)
+        });
+
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(`loanPipeline ${resp.status}: ${txt}`);
+        }
+
+        const json = await resp.json();
+        const loans = json?.loans || json?.items || [];
+        log("V1 loanPipeline loans returned:", String(loans.length));
+
+        let total = 0;
+        const byMilestone = {};
+
+        for (const l of loans) {
+          const amtVal = l?.fields?.["Fields.1109"] ?? 0;
+          const amt = Number(String(amtVal ?? "").replace(/,/g, ""));
+          if (isFinite(amt)) total += amt;
+
+          const msRaw = l?.fields?.["Fields.Log.MS.CurrentMilestone"] ?? "Unknown";
+          const ms = String(msRaw).trim() || "Unknown";
+          byMilestone[ms] = (byMilestone[ms] || 0) + 1;
+        }
+
+        document.getElementById("pipeCount").textContent = String(loans.length);
+        document.getElementById("pipeTotal").textContent = formatMoney(total);
+
+        document.getElementById("pipeByStatus").textContent =
+          Object.entries(byMilestone)
+            .sort((a,b) => b[1] - a[1])
+            .map(([k,v]) => `${k}: ${v}`)
+            .join(" | ") || "—";
+
+        log("Pipeline KPIs refreshed ✅");
+      } catch (e) {
+        log("Pipeline KPI ERROR:", e.message);
+        document.getElementById("pipeCount").textContent = "—";
+        document.getElementById("pipeTotal").textContent = "—";
+        document.getElementById("pipeByStatus").textContent = e.message;
+      }
+    }
+
+    document.getElementById("btnPipeline").addEventListener("click", refreshPipelineKpis);
+
+    document.getElementById("btnClear").addEventListener("click", () => {
+      debugEl.textContent = "";
+      log("Debug cleared ✅");
+    });
+
+    // ---------- On load ----------
+    (async function init() {
+      try {
+        await loadFoldersIntoDropdown();
+      } catch (e) {
+        setFolderUiState({ loading: false, ready: false, message: "Failed ❌" });
+        log("INIT ERROR:", e.message);
+      }
+    })();
+  </script>
 </body>
 </html>
