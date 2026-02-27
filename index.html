@@ -532,7 +532,8 @@
       for (const l of loans1) {
         const loanNumber =
           l?.fields?.["Loan.LoanNumber"] ??
-          l?.LoanNumber ?? l?.loanNumber ?? null;
+          l?.LoanNumber ??
+          l?.loanNumber ?? null;
 
         const amtVal =
           l?.fields?.["Loan.LoanAmount"] ??
