@@ -591,8 +591,15 @@ pre{
       <canvas id="c_lo" height="180"></canvas>
       <div class="kpi-sub">Grouped by <code>Fields.317</code> (label includes volume)</div>
     </div>
+
+    <!-- Row 2 -->
     <div class="card span-6">
-          <div class="card span-12">
+      <div class="kpi-label">Loan Purpose Distribution</div>
+      <canvas id="c_purpose" height="160"></canvas>
+      <div class="kpi-sub">Grouped by <code>Fields.19</code> (Unknown excluded)</div>
+    </div>
+
+    <div class="card span-6">
       <div class="kpi-label">Milestone Turn Times (Average Days)</div>
       <canvas id="c_turnTimes" height="160"></canvas>
       <div class="kpi-sub">
@@ -603,49 +610,43 @@ pre{
       </div>
     </div>
 
-    <div class="card span-12">
-      <div class="kpi-label">Loan Purpose Distribution</div>
-      <canvas id="c_purpose" height="160"></canvas>
-      <div class="kpi-sub">Grouped by <code>Fields.19</code> (Unknown excluded)</div>
-    </div>
+    <!-- Row 3 -->
+    <div class="card span-6">
       <div class="kpi-label">Product Mix</div>
 
-<div class="card span-6">
-  <div class="kpi-label">Products</div>
+      <div class="section">
+        <div class="section-head centered">
+          <div class="section-title">Loan Type</div>
+          <div class="section-sub">Buckets • Click to drill-through</div>
+        </div>
+        <div class="list" id="rateTypeList">—</div>
+      </div>
 
-  <div class="section">
-    <div class="section-head centered">
-      <div class="section-title">Loan Type</div>
-      <div class="section-sub">Buckets • Click to drill-through</div>
+      <div class="divider"></div>
+
+      <div class="section">
+        <div class="section-head centered">
+          <div class="section-title">Loan Program</div>
+          <div class="section-sub">Buckets • Click to drill-through</div>
+        </div>
+        <div class="list" id="loanProgramList">—</div>
+      </div>
     </div>
-    <div class="list" id="rateTypeList">—</div>
-  </div>
-
-  <div class="divider"></div>
-
-  <div class="section">
-    <div class="section-head centered">
-      <div class="section-title">Loan Program</div>
-      <div class="section-sub">Buckets • Click to drill-through</div>
-    </div>
-    <div class="list" id="loanProgramList">—</div>
-  </div>
-</div>
 
     <div class="card span-6">
       <div class="kpi-label">Top Loan Officers</div>
       <div class="list" id="topLoList">—</div>
       <div class="kpi-sub">Top 10 by count (includes volume)</div>
     </div>
-  </div>
 
-  <!-- Debug -->
-<div class="card span-12" style="margin-top:12px;">
-  <details>
-    <summary>Debug</summary>
-    <pre id="debug"></pre>
-  </details>
-</div>
+    <!-- Debug (full width, bottom) -->
+    <div class="card span-12" style="margin-top:12px;">
+      <details>
+        <summary>Debug</summary>
+        <pre id="debug"></pre>
+      </details>
+    </div>
+  </div> <!-- end #kpiGrid -->
 
   <!-- Drill-through modal -->
   <div class="backdrop" id="modalBackdrop">
