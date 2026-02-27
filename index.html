@@ -217,27 +217,25 @@
 
     // ✅ Loan change subscription (auto-update)
     function setupLoanSubscription() {
-      if (!ssfLoaded) return;
-      try {
-        // Fires when loan changes; simplest is to refresh KPIs.
-        // (ICE examples show elli.script.subscribe('loan','change', ...)) :contentReference[oaicite:2]{index=2}
+    if (!ssfLoaded) return;
+    try {
         elli.script.subscribe("loan", "change", () => {
-          log("Loan change event fired → refreshing KPIs…");
-          refreshLoanKpis();
+        log("Loan change event fired → refreshing KPIs…");
+        refreshLoanKpis();
         });
         document.getElementById("subStatus").textContent = "Enabled ✅";
         log("Subscribed to loan change ✅");
-      } catch (e) {
-        document.getElementById("subStatus").textContent = `Failed ❌`;
+    } catch (e) {
+        document.getElementById("subStatus").textContent = "Failed ❌";
         log("Subscribe ERROR:", e.message);
-      }
+    }
     }
 
     // ---------- Pipeline KPIs via Token Exchange ----------
 
     async function getUserAccessTokenForApi() {
-      // Docs indicate auth.getAccessToken returns an object with access_token/token_type/host_name. :contentReference[oaicite:3]{index=3}
-      // Token exchange docs also exist for scenarios where you need a server-side exchange. :contentReference[oaicite:4]{index=4}
+      // Docs indicate auth.getAccessToken returns an object with access_token/token_type/host_name. 
+      // Token exchange docs also exist for scenarios where you need a server-side exchange. 
       const auth = await withTimeout(elli.script.getObject("auth"), 12000, "auth object");
       const tok = await withTimeout(auth.getAccessToken(), 12000, "getAccessToken");
 
@@ -261,67 +259,95 @@
       return data.access_token;
     }
 
-    async function refreshPipelineKpis() {
-      try {
-        log("Refreshing pipeline KPIs…");
-        const accessToken = await getUserAccessTokenForApi();
+async function refreshPipelineKpis() {
+  try {
+    log("Refreshing pipeline KPIs…");
+    const accessToken = await getUserAccessTokenForApi();
 
-        // Minimal starter query (limit small; we can expand/filter later)
-        const url = "https://api.elliemae.com/encompass/v1/loanPipeline?limit=25";
-        const body = {
-          fields: ["Loan.LoanAmount", "Loan.MilestoneName"],
-          // If your tenant requires a filter, we can add it after we confirm response shape.
-        };
+    // loanPipeline REQUIRES either filter or loanGuids
+    const url = "https://api.elliemae.com/encompass/v1/loanPipeline?limit=25";
 
-        const resp = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(body)
-        });
+    const body = {
+      filter: {
+        operator: "and",
+        terms: [
+          {
+            canonicalName: "Loan.LoanNumber",
+            value: "",
+            matchType: "StartsWith",
+            include: true
+          }
+        ]
+      },
+      fields: [
+        "Loan.LoanAmount",
+        "Loan.MilestoneName"
+      ]
+    };
 
-        if (!resp.ok) {
-          const txt = await resp.text();
-          throw new Error(`loanPipeline ${resp.status}: ${txt}`);
-        }
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
 
-        const json = await resp.json();
-        const loans = json?.loans || json?.items || [];
-        document.getElementById("pipeCount").textContent = String(loans.length);
-
-        let total = 0;
-        const byStatus = {};
-        for (const l of loans) {
-          const amt = Number(l?.fields?.["Loan.LoanAmount"] ?? l?.LoanAmount ?? l?.loanAmount ?? 0);
-          if (isFinite(amt)) total += amt;
-
-          const st = String(
-            l?.fields?.["Loan.MilestoneName"] ??
-            l?.MilestoneName ??
-            l?.milestoneName ??
-            "Unknown"
-          );
-          byStatus[st] = (byStatus[st] || 0) + 1;
-        }
-
-        document.getElementById("pipeTotal").textContent = formatMoney(total);
-        document.getElementById("pipeByStatus").textContent =
-          Object.keys(byStatus).length
-            ? Object.entries(byStatus).map(([k,v]) => `${k}: ${v}`).join(" | ")
-            : "—";
-
-        log("Pipeline KPIs refreshed ✅");
-        console.log("loanPipeline raw response:", json);
-      } catch (e) {
-        log("Pipeline KPI ERROR:", e.message);
-        console.error(e);
-        document.getElementById("pipeCount").textContent = "—";
-        document.getElementById("pipeTotal").textContent = "—";
-        document.getElementById("pipeByStatus").textContent = e.message;
-      }
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(`loanPipeline ${resp.status}: ${txt}`);
     }
+
+    const json = await resp.json();
+    log("loanPipeline response received ✅");
+
+    const loans = json?.loans || json?.items || [];
+    log(`Loans returned: ${loans.length}`);
+
+    // --- minimal KPI calculations ---
+    let total = 0;
+    const byStatus = {};
+
+    for (const l of loans) {
+      const amt =
+        Number(
+          l?.fields?.["Loan.LoanAmount"] ??
+          l?.LoanAmount ??
+          l?.loanAmount ??
+          0
+        );
+
+      if (isFinite(amt)) total += amt;
+
+      const status =
+        l?.fields?.["Loan.MilestoneName"] ??
+        l?.MilestoneName ??
+        l?.milestoneName ??
+        "Unknown";
+
+      byStatus[status] = (byStatus[status] || 0) + 1;
+    }
+
+   document.getElementById("pipeCount").textContent = String(loans.length);
+    document.getElementById("pipeTotal").textContent = formatMoney(total);
+
+    const byStatusText = Object.entries(byStatus)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(" | ");
+
+    document.getElementById("pipeByStatus").textContent = byStatusText || "—";
+
+    log("Pipeline KPIs refreshed ✅");
+  } catch (e) {
+    log("Pipeline KPI ERROR:", e.message);
+    console.error(e);
+
+    document.getElementById("pipeCount").textContent = "—";
+    document.getElementById("pipeTotal").textContent = "—";
+    document.getElementById("pipeByStatus").textContent = e.message;
+  }
+}
 
     // Buttons
     document.getElementById("btnRefresh").addEventListener("click", refreshLoanKpis);
