@@ -105,11 +105,11 @@
       <div class="card">
         <div class="kpi-label">Filter Mode</div>
         <div class="row" style="margin-top:6px;">
-        <select id="pipeMode" class="input">
-        <option value="all">ALL Loans (diagnostic)</option>
-        <option value="myLoans">My Loans (Loan Officer)</option>
-        <option value="folder">Folder</option>
-        </select>
+          <select id="pipeMode" class="input">
+            <option value="all">ALL Loans (diagnostic)</option>
+            <option value="myLoans">All Accessible Loans</option>
+            <option value="folder">Folder</option>
+          </select>
 
           <div class="field" style="min-width:260px;">
             <label class="muted" for="pipeFolder">Folder name (exact)</label>
@@ -122,14 +122,14 @@
           </div>
         </div>
         <div class="muted" style="margin-top:8px;">
-          Tip: start with <b>My Loans</b>. If that returns data, then switch to <b>Folder</b> once you know the exact folder name.
+          Tip: start with <b>ALL Loans (diagnostic)</b>. If that returns data, then switch to <b>Folder</b> once you know the exact folder name.
         </div>
       </div>
 
       <div class="card warn">
         <div class="kpi-label">Loans Returned</div>
         <div class="kpi-value" id="pipeCount">—</div>
-        <div class="kpi-sub">Result count (limited)</div>
+        <div class="kpi-sub">Unique count (by GUID when available)</div>
       </div>
 
       <div class="card warn">
@@ -334,46 +334,57 @@
     }
 
     function buildPipelineFilter() {
-    const mode = document.getElementById("pipeMode").value;
+      const mode = document.getElementById("pipeMode").value;
 
-    // STEP A: force a known-good filter that should always match
-    if (mode === "all") {
+      // Broad filter (works for both diagnostic + "All Accessible Loans")
+      if (mode === "all" || mode === "myLoans") {
         return {
-        operator: "and",
-        terms: [{
+          operator: "and",
+          terms: [{
             canonicalName: "Loan.LoanNumber",
             matchType: "isNotEmpty",
             include: true
-        }]
+          }]
         };
-    }
+      }
 
-    // Existing Folder mode (unchanged)
-    if (mode === "folder") {
+      // Folder mode
+      if (mode === "folder") {
         const folder = String(document.getElementById("pipeFolder").value || "").trim();
         if (!folder) throw new Error("Folder mode selected, but folder name is blank.");
 
         return {
-        operator: "and",
-        terms: [{
-            canonicalName: "Loan.LoanFolder",
+          operator: "and",
+          terms: [{
+            canonicalName: "LoanFolder.FolderName",
             value: folder,
             matchType: "exact",
             include: true
-        }]
+          }]
         };
-    }
+      }
 
-    // Existing My Loans mode (left intact for now)
-    return {
+      // Fallback (shouldn't hit)
+      return {
         operator: "and",
         terms: [{
-        canonicalName: "Loan.LoanOfficer.UserId",
-        value: "",
-        matchType: "exact",
-        include: true
+          canonicalName: "Loan.LoanNumber",
+          matchType: "isNotEmpty",
+          include: true
         }]
-    };
+      };
+    }
+
+    function getLoanGuidFromPipelineItem(item) {
+      // Defensive: tenant/version differences
+      return (
+        item?.loanGuid ||
+        item?.loanId ||
+        item?.id ||
+        item?.loan?.loanGuid ||
+        item?.loan?.id ||
+        null
+      );
     }
 
     async function refreshPipelineKpis() {
@@ -390,10 +401,13 @@
 
         const filter = buildPipelineFilter();
 
-        // Request folder too so you can verify you're actually hitting the folder you think you are
         const body = {
           filter,
-          fields: ["Loan.LoanAmount", "Loan.MilestoneName", "Loan.LoanFolder"]
+          fields: [
+            "Loan.LoanAmount",
+            "Loan.MilestoneName",
+            "LoanFolder.FolderName"
+          ]
         };
 
         log("loanPipeline request body:", body);
@@ -415,9 +429,19 @@
         const json = await resp.json();
         const loans = json?.loans || json?.items || [];
         log("loanPipeline response received ✅");
-        log(`Loans returned: ${loans.length}`);
+        log(`Loans returned (raw): ${loans.length}`);
 
-        // Minimal KPI calculations
+        // Unique loan counting by GUID (if returned)
+        const uniqueGuids = new Set();
+        for (const l of loans) {
+          const g = getLoanGuidFromPipelineItem(l);
+          if (g) uniqueGuids.add(g);
+        }
+
+        const uniqueCount = uniqueGuids.size || loans.length; // fallback if no GUIDs present
+        log(`Loans returned (unique by GUID): ${uniqueCount}`);
+
+        // KPI calculations
         let total = 0;
         const byStatus = {};
 
@@ -441,7 +465,7 @@
           byStatus[status] = (byStatus[status] || 0) + 1;
         }
 
-        document.getElementById("pipeCount").textContent = String(loans.length);
+        document.getElementById("pipeCount").textContent = String(uniqueCount);
         document.getElementById("pipeTotal").textContent = formatMoney(total);
 
         const byStatusText = Object.entries(byStatus)
@@ -453,12 +477,11 @@
 
         log("Pipeline KPIs refreshed ✅");
 
-        // Helpful one-liner when you're troubleshooting 0 loans:
         if (loans.length === 0) {
           const mode = document.getElementById("pipeMode").value;
           log("No loans returned. Notes:");
           log("- If mode is 'folder', folder name must match exactly and user must have access + pipeline visibility.");
-          log("- If mode is 'myLoans' and still 0, user may have no loans assigned or permissions restrict pipeline access.");
+          log("- If mode is 'all'/'myLoans' and still 0, this points to token context / permissions / pipeline visibility.");
           log("Current mode:", mode);
         }
       } catch (e) {
