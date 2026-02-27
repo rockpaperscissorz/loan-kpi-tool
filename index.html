@@ -46,12 +46,10 @@
       padding:10px 12px; border-radius:12px; border:1px solid #d8d8d8; background:#fff;
       font-size:14px;
     }
-    .small{ min-width: 140px; }
+    .small{ min-width: 170px; }
 
     /* Multi-select */
-    .ms{
-      position:relative; min-width:260px;
-    }
+    .ms{ position:relative; min-width:260px; }
     .ms-btn{
       width:100%;
       text-align:left;
@@ -82,7 +80,12 @@
     /* Charts (simple canvas) */
     canvas{ width:100%; display:block; }
     .list{ display:flex; flex-direction:column; gap:6px; margin-top:10px; }
-    .list-item{ display:flex; justify-content:space-between; gap:12px; border:1px solid #f0f0f0; border-radius:12px; padding:8px 10px; }
+    .list-item{
+      display:flex; justify-content:space-between; gap:12px;
+      border:1px solid #f0f0f0; border-radius:12px; padding:8px 10px;
+    }
+    .list-item.clickable{ cursor:pointer; }
+    .list-item.clickable:hover{ background:#f7f7f7; }
     .badge{ font-size:11px; color:var(--muted); }
     .right{ text-align:right; white-space:nowrap; }
 
@@ -135,12 +138,10 @@
 
     <!-- Controls -->
     <div class="row">
-      <div class="field">
-        <label class="muted">Loan folder</label>
-        <select id="folderSelect" class="input" disabled>
-          <option value="">Loading…</option>
-        </select>
-      </div>
+    <div class="field">
+      <label class="muted">Loan Folder(s)</label>
+      <div class="ms" id="folderMs" data-ms="folders"></div>
+    </div>
 
       <div class="field small">
         <label class="muted">Limit</label>
@@ -152,15 +153,14 @@
         <input id="ageDays" class="input" type="number" min="1" max="365" value="45" />
       </div>
 
-      <div class="field">
-        <label class="muted">UW Approval Date Field (org-specific)</label>
-        <input id="uwField" class="input mono" value="Fields.2301" />
-        <div class="muted" style="margin-top:-2px;">Change if your UW approval/decision date is different.</div>
+      <div class="field small">
+        <label class="muted">UW Date Field (optional)</label>
+        <input id="uwField" class="input" placeholder="e.g. Fields.XXXX" value="" />
       </div>
 
-      <div class="field">
-        <label class="muted">Rate Type Field (for mix)</label>
-        <input id="rateTypeField" class="input mono" value="Fields.1172" />
+      <div class="field small">
+        <label class="muted">Loan Type Field</label>
+        <input id="rateTypeField" class="input" value="Fields.1172" />
       </div>
     </div>
 
@@ -169,17 +169,17 @@
     <!-- Multi-select filters -->
     <div class="row">
       <div class="field">
-        <label class="muted">Loan Officer (Fields.317)</label>
+        <label class="muted">Loan Officer</label>
         <div class="ms" data-ms="lo"></div>
       </div>
 
       <div class="field">
-        <label class="muted">Loan Purpose (Fields.19)</label>
+        <label class="muted">Loan Purpose</label>
         <div class="ms" data-ms="purpose"></div>
       </div>
 
       <div class="field">
-        <label class="muted">Rate Type (config field)</label>
+        <label class="muted">Loan Type (1172)</label>
         <div class="ms" data-ms="rateType"></div>
       </div>
 
@@ -190,7 +190,7 @@
     </div>
 
     <div class="muted" style="margin-top:10px;">
-      Filters support multi-select. Empty selection = “All”.
+      Filters support multi-select. Empty selection = “All”. (Unknown/blank for 19 & 1172 are excluded from filter options.)
     </div>
   </div>
 
@@ -287,13 +287,13 @@
     <div class="card span-12">
       <div class="kpi-label">Loan Purpose Distribution</div>
       <canvas id="c_purpose" height="160"></canvas>
-      <div class="kpi-sub">Grouped by <code>Fields.19</code></div>
+      <div class="kpi-sub">Grouped by <code>Fields.19</code> (Unknown excluded)</div>
     </div>
 
     <div class="card span-6">
-      <div class="kpi-label">Rate Type Mix</div>
+      <div class="kpi-label">Rate Type Mix (Buckets)</div>
       <div class="list" id="rateTypeList">—</div>
-      <div class="kpi-sub">Grouped by configured Rate Type field</div>
+      <div class="kpi-sub">Click a bucket to drill-through. HELOC never counted as Conventional.</div>
     </div>
 
     <div class="card span-6">
@@ -383,6 +383,14 @@
       return s ? s : fallback;
     };
 
+    const normStr = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      // treat Unknown as empty for our "do not pull unknown" requirement
+      if (s.toLowerCase() === "unknown") return "";
+      return s;
+    };
+
     const money = (n) => {
       const num = toNumber(n);
       if (!Number.isFinite(num)) return "—";
@@ -403,11 +411,9 @@
       const s = String(v ?? "").trim();
       if (!s) return null;
 
-      // Try native parse first
       const d1 = new Date(s);
       if (!isNaN(d1.getTime())) return d1;
 
-      // Try mm/dd/yyyy
       const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
       if (m){
         const mm = Number(m[1]), dd = Number(m[2]), yy = Number(m[3].length === 2 ? "20"+m[3] : m[3]);
@@ -436,14 +442,22 @@
       $("lastRefresh").textContent = new Date().toLocaleString();
     }
 
+    function escapeHtml(s){
+      return String(s ?? "")
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
+    }
+
     // -----------------------------
-    // Auth (same behavior, refactored)
+    // Auth
     // -----------------------------
     async function getAccessToken(){
       const auth = await elli.script.getObject("auth");
       const tok = await auth.getAccessToken();
 
-      // Sometimes returns an object with access_token; sometimes returns an auth code string
       if (tok && typeof tok === "object" && tok.access_token) return tok.access_token;
 
       const resp = await fetch("/api/exchange", {
@@ -460,7 +474,6 @@
     // -----------------------------
     // Folder loading
     // -----------------------------
-    const folderSelect = $("folderSelect");
     const folderStatus = $("folderStatus");
     const btnRefresh = $("btnRefresh");
 
@@ -488,22 +501,24 @@
       const folders = extractFolders(json).map(folderName).filter(Boolean);
       const unique = Array.from(new Set(folders)).sort((a,b)=>a.localeCompare(b));
 
-      folderSelect.innerHTML = `<option value="">Select…</option>` + unique.map(n => `<option value="${n}">${n}</option>`).join("");
-      folderSelect.disabled = false;
-      folderStatus.textContent = "Ready ✅";
+    folderStatus.textContent = "Ready ✅";
 
-      const pipeline = unique.find(n => n.toLowerCase() === "pipeline");
-      if (pipeline) folderSelect.value = pipeline;
+    // set folder multiselect options
+    msFolders.setOptions(unique);
 
-      btnRefresh.disabled = !folderSelect.value;
+    // default to Pipeline selected
+    const pipeline = unique.find(n => n.toLowerCase() === "pipeline");
+    if (pipeline) msFolders.setSelected([pipeline]);
+
+    btnRefresh.disabled = (msFolders.getSelected().length === 0);
+
+    // ✅ initial data pull when tool loads
+    if (msFolders.getSelected().length){
+      refresh().catch(e => log("Auto refresh error:", e.message));
     }
-
-    folderSelect.addEventListener("change", () => {
-      btnRefresh.disabled = !folderSelect.value;
-    });
-
+    }
     // -----------------------------
-    // Multi-select component (checkbox dropdown)
+    // Multi-select component
     // -----------------------------
     function createMultiSelect(mountEl, { placeholder="All", onChange }){
       const root = document.createElement("div");
@@ -547,7 +562,6 @@
           `;
         }).join("");
 
-        // label
         if (selected.size === 0) label.textContent = placeholder;
         else if (selected.size === 1) label.textContent = Array.from(selected)[0];
         else label.textContent = `${selected.size} selected`;
@@ -555,14 +569,12 @@
 
       function setOptions(list){
         options = Array.from(new Set((list || []).map(s => String(s).trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
-        // keep selection if still present
         selected = new Set(Array.from(selected).filter(s => options.includes(s)));
         render();
       }
 
       function setSelected(list){
         selected = new Set((list || []).filter(Boolean));
-        // keep only valid
         selected = new Set(Array.from(selected).filter(s => options.includes(s)));
         render();
         onChange?.(getSelected());
@@ -572,7 +584,6 @@
         return Array.from(selected);
       }
 
-      // open/close
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         menu.classList.toggle("open");
@@ -580,14 +591,10 @@
 
       document.addEventListener("click", () => menu.classList.remove("open"));
 
-      // checkbox changes
       itemsEl.addEventListener("change", (e) => {
         const cb = e.target;
         if (!(cb instanceof HTMLInputElement)) return;
-        const v = cb.getAttribute("data-value");
-        if (!v) return;
 
-        // data-value is escaped; re-pull from sibling text instead to avoid de-escaping complexity
         const text = cb.parentElement?.querySelector("span")?.textContent;
         const val = String(text ?? "").trim();
         if (!val) return;
@@ -618,33 +625,14 @@
       return { setOptions, setSelected, getSelected };
     }
 
-    function escapeHtml(s){
-      return String(s ?? "")
-        .replace(/&/g,"&amp;")
-        .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;")
-        .replace(/"/g,"&quot;")
-        .replace(/'/g,"&#039;");
-    }
-
-    // mount multi-selects
-    const msLo = createMultiSelect(document.querySelector('[data-ms="lo"]'), {
-      placeholder:"All LOs",
-      onChange: () => {}
-    });
-    const msPurpose = createMultiSelect(document.querySelector('[data-ms="purpose"]'), {
-      placeholder:"All Purposes",
-      onChange: () => {}
-    });
-    const msRateType = createMultiSelect(document.querySelector('[data-ms="rateType"]'), {
-      placeholder:"All Rate Types",
-      onChange: () => {}
-    });
-    const msMilestone = createMultiSelect(document.querySelector('[data-ms="milestone"]'), {
-      placeholder:"All Milestones",
-      onChange: () => {}
-    });
-
+    const msLo = createMultiSelect(document.querySelector('[data-ms="lo"]'), { placeholder:"All LOs", onChange: () => {} });
+    const msPurpose = createMultiSelect(document.querySelector('[data-ms="purpose"]'), { placeholder:"All Purposes", onChange: () => {} });
+    const msRateType = createMultiSelect(document.querySelector('[data-ms="rateType"]'), { placeholder:"All Loan Types", onChange: () => {} });
+    const msMilestone = createMultiSelect(document.querySelector('[data-ms="milestone"]'), { placeholder:"All Milestones", onChange: () => {} });
+    const msFolders = createMultiSelect(document.querySelector('[data-ms="folders"]'), {
+    placeholder: "Pipeline",
+    onChange: () => { btnRefresh.disabled = (msFolders.getSelected().length === 0); }
+  });
     // -----------------------------
     // Pipeline fetch
     // -----------------------------
@@ -657,9 +645,9 @@
       return [];
     }
 
-    async function fetchPipelineLoans({ token, folderName, limit, fields }){
-      const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
-      const body = { fields, loanFolders:[folderName] };
+    async function fetchPipelineLoans({ token, folderNames, limit, fields }){
+    const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
+    const body = { fields, loanFolders: (folderNames || []).filter(Boolean) };
 
       log("POST pipeline:", url);
       log("Body:", body);
@@ -719,7 +707,6 @@
       const bw = Math.max(10, (w - pad*2 - gap*(top.length-1)) / top.length);
       const base = h - pad;
 
-      // baseline
       ctx.beginPath();
       ctx.moveTo(pad, base);
       ctx.lineTo(w - pad, base);
@@ -747,43 +734,84 @@
       loansFiltered: [],
       lastSnapshotKey: "kpi:lastSnapshot",
       viewKey: "kpi:views",
-      drill: {} // kpiName -> loan list
+      drill: {}, // kpiName -> loan list
+      drillRateBucket: {} // bucket -> loan list
     };
 
     function getField(loan, key){
-      // v3 pipeline commonly returns loan.fields map
       return loan?.fields?.[key] ?? loan?.[key] ?? null;
     }
 
+    // ✅ Bucket logic: HELOC never counted as Conventional (even if cash out)
+    function classifyRateBucket(loanType1172, purpose19){
+      const lt = String(loanType1172 ?? "").trim().toLowerCase();
+      const p  = String(purpose19 ?? "").trim().toLowerCase();
+
+      if (!lt && !p) return "";
+
+      // hard rule first
+      if (lt.includes("heloc")) return "HELOC";
+
+      // common buckets from loan type
+      if (lt.includes("fha")) return "FHA";
+      if (lt.includes("va")) return "VA";
+      if (lt.includes("usda")) return "USDA";
+      if (lt.includes("jumbo")) return "Jumbo";
+
+      if (lt.includes("conventional") || lt.includes("conv")) return "Conventional";
+
+      // fallback heuristics (optional)
+      if (p.includes("purchase")) return "Conventional";
+      if (p.includes("refi") || p.includes("refinance") || p.includes("cash out")) return "Conventional";
+
+      return "Other";
+    }
+
     function normalizeLoan(loan){
-      const loanNumber = safe(getField(loan, "Loan.LoanNumber") ?? getField(loan, "Loan.LoanNumber.Value") ?? loan?.LoanNumber ?? loan?.loanNumber, "");
-      const amt = toNumber(getField(loan, "Loan.LoanAmount") ?? getField(loan, "Loan.LoanAmount.Value") ?? loan?.LoanAmount ?? loan?.loanAmount);
+      const loanNumber = safe(getField(loan, "Loan.LoanNumber") ?? loan?.LoanNumber ?? loan?.loanNumber, "");
+      const amt = toNumber(getField(loan, "Loan.LoanAmount") ?? loan?.LoanAmount ?? loan?.loanAmount);
+
       const lo = safe(getField(loan, "Fields.317") ?? getField(loan, "Loan.LoanOfficer") ?? getField(loan, "Loan.LoanOfficerName"), "Unassigned");
-      const purpose = safe(getField(loan, "Fields.19") ?? getField(loan, "Loan.LoanPurpose"), "Unknown");
+
+      // ✅ Requirement #1: do not pull Unknown for Fields.19 / Fields.1172
+      const purposeRaw = normStr(getField(loan, "Fields.19") ?? getField(loan, "Loan.LoanPurpose"));
       const milestone = safe(getField(loan, "Fields.Log.MS.CurrentMilestone") ?? getField(loan, "Loan.MilestoneName") ?? loan?.MilestoneName, "Unknown");
+
       const appDate = parseDate(getField(loan, "Fields.745"));
       const discDate = parseDate(getField(loan, "Fields.3142"));
       const closeDate = parseDate(getField(loan, "Fields.748"));
 
       const uwField = $("uwField").value.trim();
-      const uwDate = parseDate(getField(loan, uwField));
+      const uwDate = uwField ? parseDate(getField(loan, uwField)) : null;
 
-      const rateField = $("rateTypeField").value.trim();
-      const rateType = safe(getField(loan, rateField), "Unknown");
+      const rateField = $("rateTypeField").value.trim() || "Fields.1172";
+      const loanTypeRaw = normStr(getField(loan, rateField));
 
-      return { loanNumber, amt, lo, purpose, milestone, appDate, discDate, closeDate, uwDate, rateType, _raw: loan };
+      const rateBucket = classifyRateBucket(loanTypeRaw, purposeRaw);
+
+      return {
+        loanNumber,
+        amt,
+        lo,
+        purpose: purposeRaw,     // may be ""
+        loanType: loanTypeRaw,   // may be ""
+        rateBucket,              // bucket string
+        milestone,
+        appDate, discDate, closeDate, uwDate,
+        _raw: loan
+      };
     }
 
     function applyFilters(loans){
       const selLO = new Set(msLo.getSelected());
       const selPurpose = new Set(msPurpose.getSelected());
-      const selRate = new Set(msRateType.getSelected());
+      const selLoanType = new Set(msRateType.getSelected());
       const selMs = new Set(msMilestone.getSelected());
 
       return loans.filter(l => {
         if (selLO.size && !selLO.has(l.lo)) return false;
         if (selPurpose.size && !selPurpose.has(l.purpose)) return false;
-        if (selRate.size && !selRate.has(l.rateType)) return false;
+        if (selLoanType.size && !selLoanType.has(l.loanType)) return false;
         if (selMs.size && !selMs.has(l.milestone)) return false;
         return true;
       });
@@ -791,25 +819,6 @@
 
     function sortEntries(obj){
       return Object.entries(obj).sort((a,b)=> (b[1]-a[1]));
-    }
-
-    function renderList(elId, entries, { topN=10, volByKey=null }={}){
-      const el = $(elId);
-      if (!el) return;
-      if (!entries.length){ el.textContent = "—"; return; }
-
-      el.innerHTML = entries.slice(0, topN).map(([k,v]) => {
-        const vol = volByKey ? volByKey[k] : null;
-        return `
-          <div class="list-item">
-            <div>
-              <b>${escapeHtml(k)}</b>
-              <div class="badge">${v} loans${volByKey ? ` • ${escapeHtml(moneyShort(vol || 0))}` : ""}</div>
-            </div>
-            <div class="right"><b>${v}</b></div>
-          </div>
-        `;
-      }).join("");
     }
 
     function trendText(current, prior){
@@ -832,6 +841,7 @@
     }
 
     function setHealth(tileEl, kind){
+      if (!tileEl) return;
       tileEl.classList.remove("health-ok","health-warn","health-bad");
       if (kind) tileEl.classList.add(kind);
     }
@@ -844,7 +854,6 @@
       const loSet = new Set(loans.map(l=>l.lo).filter(v=>v && v !== "Unassigned"));
       const uniqueLOs = loSet.size;
 
-      // MTD window
       const { start, end } = monthWindow();
 
       const appsMTDLoans = loans.filter(l => l.appDate && l.appDate >= start && l.appDate < end);
@@ -857,13 +866,9 @@
 
       const threshold = Math.max(1, Math.min(365, Number($("ageDays").value || 45)));
       const now = new Date();
-      const agedLoansList = loans.filter(l => {
-        if (!l.appDate) return false;
-        return daysBetween(l.appDate, now) > threshold;
-      });
+      const agedLoansList = loans.filter(l => l.appDate && (daysBetween(l.appDate, now) > threshold));
       const agedLoans = agedLoansList.length;
 
-      // Turn times
       const appToDiscList = loans.map(l => daysBetween(l.appDate, l.discDate)).filter(d => Number.isFinite(d) && d >= 0);
       const appToUWList   = loans.map(l => daysBetween(l.appDate, l.uwDate)).filter(d => Number.isFinite(d) && d >= 0);
       const appToCloseList= loans.map(l => daysBetween(l.appDate, l.closeDate)).filter(d => Number.isFinite(d) && d >= 0);
@@ -874,32 +879,42 @@
       const avgAppToUW   = avg(appToUWList);
       const avgAppToClose= avg(appToCloseList);
 
-      // Mix: purpose distribution (also used for chart)
+      // ✅ purpose distribution excluding unknown/blank
       const byPurpose = {};
-      for (const l of loans) byPurpose[l.purpose] = (byPurpose[l.purpose] || 0) + 1;
-
+      for (const l of loans){
+        if (!l.purpose) continue;
+        byPurpose[l.purpose] = (byPurpose[l.purpose] || 0) + 1;
+      }
       const purposeEntries = sortEntries(byPurpose);
       const topPurpose = purposeEntries[0]?.[0] ?? "—";
       const topPurposeShare = totalUnits ? (purposeEntries[0]?.[1] || 0) / totalUnits : NaN;
 
-      // Group: milestone, LO, rate type
       const byMilestone = {};
       const byLO = {};
       const volByLO = {};
-      const byRateType = {};
+
+      // ✅ bucketed mix for Rate Type list + drill
+      const byRateBucket = {};
+      const drillRateBucket = {};
 
       for (const l of loans){
         byMilestone[l.milestone] = (byMilestone[l.milestone] || 0) + 1;
+
         byLO[l.lo] = (byLO[l.lo] || 0) + 1;
         volByLO[l.lo] = (volByLO[l.lo] || 0) + (Number.isFinite(l.amt) ? l.amt : 0);
-        byRateType[l.rateType] = (byRateType[l.rateType] || 0) + 1;
+
+        if (l.rateBucket){
+          byRateBucket[l.rateBucket] = (byRateBucket[l.rateBucket] || 0) + 1;
+          (drillRateBucket[l.rateBucket] ||= []).push(l);
+        }
       }
 
       const milestoneEntries = sortEntries(byMilestone);
       const loEntries = sortEntries(byLO);
-      const rateEntries = sortEntries(byRateType);
+      const rateBucketEntries = sortEntries(byRateBucket);
 
-      // Drill-through sets
+      state.drillRateBucket = drillRateBucket;
+
       state.drill = {
         pipelineUnits: loans,
         pipelineVol: loans,
@@ -907,12 +922,12 @@
         uniqueLOs: loans,
         appsMTD: appsMTDLoans,
         fundedMTD: fundedMTDLoans,
-        pullThrough: appsMTDLoans, // drill to apps cohort
+        pullThrough: appsMTDLoans,
         agedLoans: agedLoansList,
         t_appToDisc: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.discDate)) && daysBetween(l.appDate, l.discDate) >= 0),
         t_appToUW: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.uwDate)) && daysBetween(l.appDate, l.uwDate) >= 0),
         t_appToClose: loans.filter(l => Number.isFinite(daysBetween(l.appDate, l.closeDate)) && daysBetween(l.appDate, l.closeDate) >= 0),
-        mixPurposeTop: loans.filter(l => l.purpose === topPurpose)
+        mixPurposeTop: loans.filter(l => l.purpose && l.purpose === topPurpose)
       };
 
       return {
@@ -921,12 +936,13 @@
         agedLoans, threshold,
         avgAppToDisc, avgAppToUW, avgAppToClose,
         topPurpose, topPurposeShare,
-        milestoneEntries, loEntries, volByLO, purposeEntries, rateEntries
+        milestoneEntries, loEntries, volByLO,
+        purposeEntries,
+        rateBucketEntries
       };
     }
 
     function renderKpis(k, prior){
-      // Values
       $("k_pipelineUnits").textContent = String(k.totalUnits);
       $("k_pipelineVol").textContent   = money(k.totalVol);
       $("k_avgLoanAmt").textContent    = Number.isFinite(k.avgAmt) ? money(k.avgAmt) : "—";
@@ -942,7 +958,6 @@
       $("k_appToClose").textContent    = Number.isFinite(k.avgAppToClose) ? k.avgAppToClose.toFixed(1) : "—";
       $("k_mixPurposeTop").textContent = k.topPurpose === "—" ? "—" : `${k.topPurpose} • ${pct(k.topPurposeShare)}`;
 
-      // Trends
       if (prior){
         setTrend("t_pipelineUnits", k.totalUnits, prior.totalUnits);
         setTrend("t_pipelineVol",   k.totalVol,   prior.totalVol);
@@ -957,43 +972,74 @@
         setTrend("t_appToDisc",     k.avgAppToDisc, prior.avgAppToDisc);
         setTrend("t_appToUW",       k.avgAppToUW,   prior.avgAppToUW);
         setTrend("t_appToClose",    k.avgAppToClose, prior.avgAppToClose);
-        // mix trend is not numeric-stable; omit
       }
 
-      // Health coloring (simple, can tune)
       const tiles = Array.from(document.querySelectorAll(".kpi-tile"));
       for (const t of tiles) t.classList.remove("health-ok","health-warn","health-bad");
 
-      // Example thresholds:
-      // - App→Disclosure: warn > 3 days, bad > 5 days
       setHealth(document.querySelector('[data-kpi="t_appToDisc"]'),
         Number.isFinite(k.avgAppToDisc) ? (k.avgAppToDisc > 5 ? "health-bad" : (k.avgAppToDisc > 3 ? "health-warn" : "health-ok")) : null
       );
-      // - Aging: warn if >10% aged, bad if >20%
+
       const agedRatio = k.totalUnits ? (k.agedLoans / k.totalUnits) : NaN;
       setHealth(document.querySelector('[data-kpi="agedLoans"]'),
         Number.isFinite(agedRatio) ? (agedRatio > 0.20 ? "health-bad" : (agedRatio > 0.10 ? "health-warn" : "health-ok")) : null
       );
     }
 
+    function renderList(elId, entries, { topN=10, volByKey=null, onClickKey=null }={}){
+      const el = $(elId);
+      if (!el) return;
+      if (!entries.length){ el.textContent = "—"; return; }
+
+      el.innerHTML = entries.slice(0, topN).map(([k,v]) => {
+        const vol = volByKey ? volByKey[k] : null;
+        return `
+          <div class="list-item ${onClickKey ? "clickable" : ""}" data-key="${escapeHtml(k)}">
+            <div>
+              <b>${escapeHtml(k)}</b>
+              <div class="badge">${v} loans${volByKey ? ` • ${escapeHtml(moneyShort(vol || 0))}` : ""}</div>
+            </div>
+            <div class="right"><b>${v}</b></div>
+          </div>
+        `;
+      }).join("");
+
+      if (onClickKey){
+        el.querySelectorAll(".list-item").forEach(item => {
+          item.addEventListener("click", () => {
+            const key = item.getAttribute("data-key") || "";
+            if (!key) return;
+            onClickKey(key);
+          });
+        });
+      }
+    }
+
     function renderBreakdowns(k){
-      // milestone
       barChart("c_milestone", k.milestoneEntries, { maxBars: 12 });
 
-      // LO chart labels include volume
       const loChartEntries = k.loEntries.slice(0, 8).map(([name,count]) => {
         const vol = k.volByLO[name] || 0;
         return [`${name} • ${moneyShort(vol)}`, count];
       });
       barChart("c_lo", loChartEntries, { maxBars: 8 });
 
-      // purpose
       barChart("c_purpose", k.purposeEntries, { maxBars: 14 });
 
-      // rate list
-      renderList("rateTypeList", k.rateEntries, { topN: 12 });
+      // ✅ Requirement #3: Rate Type Mix list is drillable
+      renderList("rateTypeList", k.rateBucketEntries, {
+        topN: 12,
+        onClickKey: (bucket) => {
+          const loans = state.drillRateBucket[bucket] || [];
+          openModal({
+            title: `Rate Type Mix: ${bucket}`,
+            subtitle: `${loans.length} loans`,
+            loans
+          });
+        }
+      });
 
-      // top LOs
       renderList("topLoList", k.loEntries, { topN: 10, volByKey: k.volByLO });
     }
 
@@ -1019,11 +1065,13 @@
           const amt = Number.isFinite(l.amt) ? moneyShort(l.amt) : "—";
           const app = l.appDate ? l.appDate.toLocaleDateString() : "—";
           const ms = safe(l.milestone, "—");
+          const purpose = l.purpose ? l.purpose : "—";
+          const loanType = l.loanType ? l.loanType : "—";
           return `
             <div class="list-item">
               <div>
                 <b class="mono">${escapeHtml(num || "(no loan #)")}</b>
-                <div class="badge">${escapeHtml(l.lo)} • ${escapeHtml(l.purpose)} • ${escapeHtml(ms)} • App: ${escapeHtml(app)}</div>
+                <div class="badge">${escapeHtml(l.lo)} • ${escapeHtml(purpose)} • ${escapeHtml(loanType)} • ${escapeHtml(ms)} • App: ${escapeHtml(app)}</div>
               </div>
               <div class="right"><b>${escapeHtml(amt)}</b></div>
             </div>
@@ -1052,7 +1100,6 @@
       }
     });
 
-    // click KPI tile
     document.addEventListener("click", (e) => {
       const tile = e.target.closest?.(".kpi-tile");
       if (!tile) return;
@@ -1067,7 +1114,7 @@
     });
 
     // -----------------------------
-    // Saved views / presets (QoL)
+    // Saved views
     // -----------------------------
     function getViews(){
       try { return JSON.parse(localStorage.getItem(state.viewKey) || "[]"); }
@@ -1102,7 +1149,6 @@
       $("uwField").value = v.uwField ?? $("uwField").value;
       $("rateTypeField").value = v.rateTypeField ?? $("rateTypeField").value;
 
-      // options must already be loaded; setSelected will ignore invalids
       msLo.setSelected(v.filters?.lo || []);
       msPurpose.setSelected(v.filters?.purpose || []);
       msRateType.setSelected(v.filters?.rateType || []);
@@ -1140,8 +1186,8 @@
     // Refresh flow
     // -----------------------------
     async function refresh(){
-      const folder = folderSelect.value;
-      if (!folder) return;
+      const folders = msFolders.getSelected();
+      if (!folders.length) return;
 
       btnRefresh.disabled = true;
       debugEl.textContent += (debugEl.textContent ? "\n" : "") + "---- REFRESH ----\n";
@@ -1150,9 +1196,8 @@
       const limit = Math.max(1, Math.min(1000, Number($("limit").value || 1000)));
 
       const uwField = $("uwField").value.trim();
-      const rateField = $("rateTypeField").value.trim();
+      const rateField = $("rateTypeField").value.trim() || "Fields.1172";
 
-      // Fields required for KPIs + breakdowns + drill-through
       const fields = [
         "Loan.LoanNumber",
         "Loan.LoanAmount",
@@ -1162,42 +1207,34 @@
         "Fields.745",
         "Fields.3142",
         "Fields.748",
-        uwField,
-        rateField
+        rateField,
+        uwField
       ].filter(Boolean);
 
-      // Fetch raw loans
-      const raw = await fetchPipelineLoans({ token, folderName: folder, limit, fields });
-
-      // Normalize
+      const raw = await fetchPipelineLoans({ token, folderNames: folders, limit, fields });
       const normalized = raw.map(normalizeLoan);
 
-      // Populate filter options (from normalized)
       const uniq = (arr) => Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b)));
 
-      msLo.setOptions(uniq(normalized.map(l => l.lo)));
-      msPurpose.setOptions(uniq(normalized.map(l => l.purpose)));
-      msRateType.setOptions(uniq(normalized.map(l => l.rateType)));
+      // ✅ Requirement #1: exclude Unknown/blank for 19 & 1172 options
+      msLo.setOptions(uniq(normalized.map(l => l.lo).filter(v => v && v.toLowerCase() !== "unknown")));
+      msPurpose.setOptions(uniq(normalized.map(l => l.purpose)));     // already excludes unknown via normStr
+      msRateType.setOptions(uniq(normalized.map(l => l.loanType)));   // already excludes unknown via normStr
       msMilestone.setOptions(uniq(normalized.map(l => l.milestone)));
 
-      // Apply filters
       const filtered = applyFilters(normalized);
 
       state.loansRaw = normalized;
       state.loansFiltered = filtered;
 
-      // Prior snapshot for trend
       let prior = null;
       try { prior = JSON.parse(localStorage.getItem(state.lastSnapshotKey) || "null"); } catch {}
 
-      // Compute KPIs
       const k = computeKpis(filtered);
 
-      // Render KPIs + charts + lists
       renderKpis(k, prior);
       renderBreakdowns(k);
 
-      // Save snapshot for next time
       localStorage.setItem(state.lastSnapshotKey, JSON.stringify({
         totalUnits: k.totalUnits,
         totalVol: k.totalVol,
