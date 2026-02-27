@@ -4,13 +4,32 @@
     <meta charset="utf-8" />
     <title>Loan KPI Tool</title>
   </head>
-  <body style="font-family: Arial; padding: 24px;">
-    <h1 style="border: 6px solid red; padding: 16px;">
-      PROOF OF LIFE — If you see this, your deployment works.
-    </h1>
-    <p>Deployed at: <span id="t"></span></p>
-    <script>
-      document.getElementById("t").textContent = new Date().toString();
-    </script>
-  </body>
+<script src="https://cdn.elliemae.io/elliemae/core/ssf/1.0/elli.ssf.guest-with-polyfill.js"></script>
+
+<div style="margin-top:12px;padding:12px;border:1px solid #ddd;border-radius:12px;">
+  <div><b>SSF status:</b> <span id="ssfStatus">Checking…</span></div>
+  <div style="margin-top:8px;"><b>Auth status:</b> <span id="authStatus">Not started</span></div>
+</div>
+
+<script>
+  // SSF check
+  const ssfOk = (window.elli && elli.script);
+  document.getElementById("ssfStatus").textContent = ssfOk ? "Loaded ✅" : "NOT loaded ❌";
+
+  async function testAuth() {
+    try {
+      document.getElementById("authStatus").textContent = "Getting token…";
+      const auth = await elli.script.getObject("auth");
+      const tok = await auth.getAccessToken();   // {access_token, token_type, host_name}
+      document.getElementById("authStatus").textContent =
+        tok?.access_token ? `Token OK ✅ (${tok.token_type || "Bearer"})` : "Token missing ❌";
+      console.log("Auth token payload:", tok);
+    } catch (e) {
+      console.error(e);
+      document.getElementById("authStatus").textContent = `Auth failed ❌ (${e.message})`;
+    }
+  }
+
+  if (ssfOk) testAuth();
+</script>
 </html>
