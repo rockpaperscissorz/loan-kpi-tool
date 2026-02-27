@@ -8,32 +8,51 @@
   <script src="https://cdn.elliemae.io/elliemae/core/ssf/1.0/elli.ssf.guest-with-polyfill.js"></script>
 
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; background:#fafafa; }
     h2 { margin: 0 0 6px; }
     .muted { opacity: 0.75; font-size: 12px; }
     .bar { display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top: 12px; }
     .btn  { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .pill { padding: 4px 10px; border-radius: 999px; border: 1px solid #ddd; font-size: 12px; background: #fff; }
-    .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 12px; }
-    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; background:#fff; }
+    .pill { padding: 6px 10px; border-radius: 999px; border: 1px solid #e6e6e6; font-size: 12px; background: #fff; }
+    .grid { display:grid; gap:12px; grid-template-columns: repeat(12, 1fr); margin-top: 12px; }
+    .card { border: 1px solid #e6e6e6; border-radius: 16px; padding: 14px; background:#fff; box-shadow: 0 1px 0 rgba(0,0,0,0.03); }
     .kpi-label { font-size: 12px; opacity: 0.75; margin-bottom: 6px; }
-    .kpi-value { font-size: 22px; font-weight: 700; line-height: 1.15; word-break: break-word; }
+    .kpi-value { font-size: 26px; font-weight: 800; line-height: 1.15; word-break: break-word; }
     .kpi-sub { margin-top: 6px; font-size: 12px; opacity: 0.75; }
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     pre { background:#f7f7f7; padding: 10px; border-radius: 10px; overflow:auto; }
     code { background:#f7f7f7; padding:2px 6px; border-radius:6px; }
-    .warn { border: 1px solid #f0c36d; background:#fff7e6; }
     .field { display:flex; flex-direction:column; gap:4px; }
     .input, select {
-      padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background:#fff;
+      padding: 10px 12px; border-radius: 12px; border: 1px solid #d8d8d8; background:#fff;
       font-size: 14px;
       min-width: 260px;
     }
+
+    /* Layout helpers */
+    .span-12 { grid-column: span 12; }
+    .span-6  { grid-column: span 6; }
+    .span-4  { grid-column: span 4; }
+    .span-3  { grid-column: span 3; }
+    @media (max-width: 980px) {
+      .span-6, .span-4, .span-3 { grid-column: span 12; }
+      .input, select { min-width: 220px; }
+    }
+
+    .divider { height:1px; background:#efefef; margin:10px 0; }
+    .kpi-mini { font-size: 14px; font-weight: 700; }
+    .list { display:flex; flex-direction:column; gap:6px; margin-top: 8px; }
+    .list-item { display:flex; justify-content:space-between; gap:10px; border:1px solid #f0f0f0; border-radius: 12px; padding: 8px 10px; }
+    .list-item b { font-weight: 700; }
+    .right { text-align:right; white-space:nowrap; }
+    .badge { font-size: 11px; opacity:0.75; }
+    canvas { width: 100%; display:block; }
   </style>
 </head>
 
 <body>
+  <!-- Header -->
   <div class="card">
     <h2>Pipeline KPI Dashboard</h2>
     <div class="muted">
@@ -46,22 +65,18 @@
         <span class="pill"><b>SSF:</b> <span id="ssfStatus">Checking…</span></span>
         <span class="pill"><b>Guest init:</b> <span id="guestStatus">Not started</span></span>
         <span class="pill"><b>Folder list:</b> <span id="folderStatus">Not loaded</span></span>
+        <span class="pill"><b>Last refresh:</b> <span id="lastRefresh">—</span></span>
       </div>
 
       <div class="row">
-        <button id="btnPipeline" class="btn" disabled>Refresh Pipeline KPIs</button>
+        <button id="btnPipeline" class="btn" disabled>Refresh</button>
         <button id="btnClear" class="btn">Clear Debug</button>
       </div>
     </div>
-  </div>
 
-  <div class="card" style="margin-top:12px;">
-    <h2 style="margin-bottom:2px;">Folder Selection</h2>
-    <div class="muted">
-      Dropdown values are folder names returned by V3. These are passed to V3 <code>loanFolders</code>.
-    </div>
+    <div class="divider"></div>
 
-    <div class="row" style="margin-top:10px;">
+    <div class="row">
       <div class="field">
         <label class="muted" for="folderSelect">Loan folder</label>
         <select id="folderSelect" class="input" disabled>
@@ -69,51 +84,80 @@
         </select>
       </div>
 
-      <div class="field" style="min-width:140px;">
+      <div class="field" style="min-width:160px;">
         <label class="muted" for="pipeLimit">Limit</label>
-        <input id="pipeLimit" class="input" type="number" min="1" max="1000" value="1000" style="min-width:140px;" />
+        <input id="pipeLimit" class="input" type="number" min="1" max="1000" value="1000" style="min-width:160px;" />
       </div>
-    </div>
 
-    <div class="muted" style="margin-top:8px;">
-      Selected folder: <code id="resolvedFolderName">—</code>
+      <div class="field" style="min-width:240px;">
+        <label class="muted">Selected folder</label>
+        <div class="pill" style="padding:10px 12px;"><code id="resolvedFolderName">—</code></div>
+      </div>
     </div>
   </div>
 
-  <div class="grid" style="margin-top:12px;">
-    <div class="card warn">
-      <div class="kpi-label">Loans Returned</div>
-      <div class="kpi-value" id="pipeCount">—</div>
-      <div class="kpi-sub">Count of loans returned by V3</div>
+  <!-- Headline KPIs -->
+  <div class="grid">
+    <div class="card span-3">
+      <div class="kpi-label">Loans</div>
+      <div class="kpi-value" id="kpiLoans">—</div>
+      <div class="kpi-sub">Count returned</div>
     </div>
 
-    <div class="card warn">
-      <div class="kpi-label">Total Loan Amount</div>
-      <div class="kpi-value" id="pipeTotal">—</div>
-      <div class="kpi-sub">Sum of returned loans’ amounts</div>
+    <div class="card span-3">
+      <div class="kpi-label">Total Volume</div>
+      <div class="kpi-value" id="kpiTotalVol">—</div>
+      <div class="kpi-sub">Sum of loan amounts</div>
     </div>
 
-    <div class="card warn">
-      <div class="kpi-label">By Milestone (CurrentMilestone)</div>
-      <div class="kpi-value" style="font-size:14px; font-weight:600;" id="pipeByStatus">—</div>
+    <div class="card span-3">
+      <div class="kpi-label">Avg Loan Amount</div>
+      <div class="kpi-value" id="kpiAvg">—</div>
+      <div class="kpi-sub">Total ÷ Loans</div>
+    </div>
+
+    <div class="card span-3">
+      <div class="kpi-label">Unique LOs</div>
+      <div class="kpi-value" id="kpiLoCount">—</div>
+      <div class="kpi-sub">Distinct <code>Fields.317</code></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="card span-6">
+      <div class="kpi-label">Loans by Milestone (CurrentMilestone)</div>
+      <canvas id="milestoneChart" height="180"></canvas>
       <div class="kpi-sub">Grouped by <code>Fields.Log.MS.CurrentMilestone</code></div>
     </div>
 
-    <div class="card warn">
-      <div class="kpi-label">By Loan Purpose (Field 19)</div>
-      <div class="kpi-value" style="font-size:14px; font-weight:600;" id="pipeByPurpose">—</div>
-      <div class="kpi-sub">Grouped by <code>Fields.19</code> (Null bucket if missing)</div>
+    <div class="card span-6">
+      <div class="kpi-label">Loans by Loan Officer</div>
+      <canvas id="loChart" height="180"></canvas>
+      <div class="kpi-sub">Grouped by <code>Fields.317</code> (Null bucket if missing)</div>
     </div>
 
-    <div class="card warn" style="grid-column: 1 / -1;">
-      <div class="kpi-label">Loan Purpose (Field 19) – Bar Chart</div>
-      <canvas id="purposeChart" height="140"></canvas>
-      <div class="kpi-sub">Bars are counts per purpose</div>
+    <div class="card span-12">
+      <div class="kpi-label">Loan Purpose (Field 19)</div>
+      <canvas id="purposeChart" height="160"></canvas>
+      <div class="kpi-sub">Bar chart grouped by <code>Fields.19</code></div>
     </div>
-  </div><!-- ✅ END GRID -->
 
+    <!-- Top lists -->
+    <div class="card span-6">
+      <div class="kpi-label">Top Milestones</div>
+      <div class="list" id="milestoneList">—</div>
+      <div class="kpi-sub">Top 10 by count</div>
+    </div>
+
+    <div class="card span-6">
+      <div class="kpi-label">Top Loan Officers</div>
+      <div class="list" id="loList">—</div>
+      <div class="kpi-sub">Top 10 by count</div>
+    </div>
+  </div>
+
+  <!-- Debug -->
   <div class="card" style="margin-top:12px;">
-    <details open>
+    <details>
       <summary>Debug output</summary>
       <pre id="debug"></pre>
     </details>
@@ -160,6 +204,16 @@
       const num = Number(String(n ?? "").replace(/,/g, ""));
       if (!isFinite(num)) return "—";
       return num.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+    }
+
+    function safeText(v, fallback="—") {
+      const s = String(v ?? "").trim();
+      return s ? s : fallback;
+    }
+
+    function setLastRefresh() {
+      const d = new Date();
+      document.getElementById("lastRefresh").textContent = d.toLocaleString();
     }
 
     // -------- Auth (UNCHANGED) --------
@@ -240,29 +294,39 @@
       }
     }
 
+    function clearCanvas(id) {
+      const c = document.getElementById(id);
+      if (!c) return;
+      const ctx = c.getContext("2d");
+      ctx.clearRect(0, 0, c.width, c.height);
+    }
+
     function onFolderChanged() {
       selectedFolderName = folderSelect.value || null;
       resolvedFolderNameEl.textContent = selectedFolderName || "—";
       btnPipeline.disabled = !selectedFolderName;
 
-      document.getElementById("pipeCount").textContent = "—";
-      document.getElementById("pipeTotal").textContent = "—";
-      document.getElementById("pipeByStatus").textContent = "—";
-      document.getElementById("pipeByPurpose").textContent = "—";
+      // Clear headline KPIs
+      document.getElementById("kpiLoans").textContent = "—";
+      document.getElementById("kpiTotalVol").textContent = "—";
+      document.getElementById("kpiAvg").textContent = "—";
+      document.getElementById("kpiLoCount").textContent = "—";
 
-      // clear chart
-      const c = document.getElementById("purposeChart");
-      if (c) {
-        const ctx = c.getContext("2d");
-        ctx.clearRect(0, 0, c.width, c.height);
-      }
+      // Clear lists
+      document.getElementById("milestoneList").textContent = "—";
+      document.getElementById("loList").textContent = "—";
+
+      // Clear charts
+      clearCanvas("milestoneChart");
+      clearCanvas("loChart");
+      clearCanvas("purposeChart");
 
       log("Folder selected:", selectedFolderName || "(none)");
     }
 
     folderSelect.addEventListener("change", onFolderChanged);
 
-    // ---------- Debug helpers ----------
+    // ---------- Response helpers ----------
     function summarizeJsonShape(json) {
       const keys = json && typeof json === "object" ? Object.keys(json) : [];
       const counts = {
@@ -285,32 +349,60 @@
       return [];
     }
 
-    // ---------- Chart helper ----------
-    function renderPurposeBarChart(byPurpose) {
-      const labels = Object.keys(byPurpose);
-      const data = labels.map(k => byPurpose[k]);
+    function sortedEntries(obj) {
+      return Object.entries(obj).sort((a,b) => b[1] - a[1]);
+    }
 
-      const canvas = document.getElementById("purposeChart");
+    function renderTopList(containerId, entries, topN=10) {
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      if (!entries.length) { el.textContent = "—"; return; }
+
+      el.innerHTML = entries.slice(0, topN).map(([k,v]) => `
+        <div class="list-item">
+          <div>
+            <b>${escapeHtml(k)}</b>
+            <div class="badge">${v} loans</div>
+          </div>
+          <div class="right kpi-mini">${v}</div>
+        </div>
+      `).join("");
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? "")
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
+    }
+
+    // ---------- Simple bar chart renderer ----------
+    function renderBarChart(canvasId, entries, maxBars=12) {
+      const canvas = document.getElementById(canvasId);
       if (!canvas) return;
 
-      const ctx = canvas.getContext("2d");
-
       // responsive width
-      const parentWidth = canvas.parentElement?.clientWidth || 600;
-      canvas.width = Math.max(320, parentWidth - 24);
+      const parentWidth = canvas.parentElement?.clientWidth || 800;
+      canvas.width = Math.max(420, parentWidth - 24);
 
+      const ctx = canvas.getContext("2d");
       const w = canvas.width;
       const h = canvas.height;
 
-      // clear
       ctx.clearRect(0, 0, w, h);
 
-      if (!labels.length) {
+      const top = entries.slice(0, maxBars);
+      if (!top.length) {
         ctx.fillText("No data", 10, 20);
         return;
       }
 
+      const labels = top.map(([k]) => k);
+      const data = top.map(([,v]) => v);
       const maxVal = Math.max(...data, 1);
+
       const padding = 28;
       const barGap = 10;
       const barWidth = Math.max(10, (w - padding * 2 - barGap * (labels.length - 1)) / labels.length);
@@ -329,12 +421,9 @@
         const y = baseline - barHeight;
 
         ctx.fillRect(x, y, barWidth, barHeight);
-
-        // value
         ctx.fillText(String(val), x, Math.max(12, y - 6));
 
-        // label
-        const short = label.length > 12 ? label.slice(0, 12) + "…" : label;
+        const short = label.length > 14 ? label.slice(0, 14) + "…" : label;
         ctx.fillText(short, x, h - 10);
       });
     }
@@ -350,15 +439,17 @@
       const limit = Math.max(1, Math.min(1000, Number(document.getElementById("pipeLimit").value || 1000)));
       const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
 
-      // Updates:
+      // Requests:
       // - CurrentMilestone: Fields.Log.MS.CurrentMilestone
-      // - Loan Purpose: Fields.19
+      // - Loan Purpose: Fields.19 (for bar chart only)
+      // - Loan Officer: Fields.317
       const body = {
         fields: [
           "Loan.LoanAmount",
           "Loan.LoanNumber",
           "Fields.Log.MS.CurrentMilestone",
-          "Fields.19"
+          "Fields.19",
+          "Fields.317"
         ],
         loanFolders: [ selectedFolderName ]
       };
@@ -396,10 +487,11 @@
       const loans = pickFirstArray(json);
       log("V3 detected loans array length:", String(loans.length));
 
-      // KPI calculations
+      // Compute KPIs
       let total = 0;
       const byMilestone = {};
       const byPurpose = {};
+      const byLO = {};
 
       for (const l of loans) {
         const amtVal =
@@ -414,9 +506,9 @@
         const msVal =
           l?.fields?.["Fields.Log.MS.CurrentMilestone"] ??
           l?.fields?.["Loan.MilestoneName"] ??
-          l?.MilestoneName ?? l?.milestoneName ?? "Unknown";
+          l?.MilestoneName ?? l?.milestoneName ?? null;
 
-        const ms = String(msVal ?? "").trim() || "Unknown";
+        const ms = safeText(msVal, "Unknown");
         byMilestone[ms] = (byMilestone[ms] || 0) + 1;
 
         const purposeVal =
@@ -424,31 +516,42 @@
           l?.fields?.["Loan.LoanPurpose"] ??
           l?.LoanPurpose ?? l?.loanPurpose ?? null;
 
-        const purpose = String(purposeVal ?? "").trim() || "Null";
+        const purpose = safeText(purposeVal, "Null");
         byPurpose[purpose] = (byPurpose[purpose] || 0) + 1;
+
+        const loVal =
+          l?.fields?.["Fields.317"] ??
+          l?.fields?.["Loan.LoanOfficer"] ??
+          l?.fields?.["Loan.LoanOfficerName"] ??
+          null;
+
+        const lo = safeText(loVal, "Null");
+        byLO[lo] = (byLO[lo] || 0) + 1;
       }
 
-      document.getElementById("pipeCount").textContent = String(loans.length);
-      document.getElementById("pipeTotal").textContent = formatMoney(total);
+      // Headline KPIs
+      document.getElementById("kpiLoans").textContent = String(loans.length);
+      document.getElementById("kpiTotalVol").textContent = formatMoney(total);
 
-      document.getElementById("pipeByStatus").textContent =
-        Object.entries(byMilestone)
-          .sort((a,b) => b[1] - a[1])
-          .map(([k,v]) => `${k}: ${v}`)
-          .join(" | ") || "—";
+      const avg = loans.length ? (total / loans.length) : 0;
+      document.getElementById("kpiAvg").textContent = loans.length ? formatMoney(avg) : "—";
 
-      document.getElementById("pipeByPurpose").textContent =
-        Object.entries(byPurpose)
-          .sort((a,b) => b[1] - a[1])
-          .map(([k,v]) => `${k}: ${v}`)
-          .join(" | ") || "—";
+      const uniqueLOs = Object.keys(byLO).filter(k => k !== "Null").length || (Object.keys(byLO).length);
+      document.getElementById("kpiLoCount").textContent = String(uniqueLOs);
 
-      renderPurposeBarChart(
-        Object.fromEntries(
-          Object.entries(byPurpose).sort((a,b) => b[1] - a[1])
-        )
-      );
+      // Render charts + lists (trend-style: top N focus)
+      const milestoneEntries = sortedEntries(byMilestone);
+      const purposeEntries = sortedEntries(byPurpose);
+      const loEntries = sortedEntries(byLO);
 
+      renderBarChart("milestoneChart", milestoneEntries, 12);
+      renderBarChart("loChart", loEntries, 12);
+      renderBarChart("purposeChart", purposeEntries, 14);
+
+      renderTopList("milestoneList", milestoneEntries, 10);
+      renderTopList("loList", loEntries, 10);
+
+      setLastRefresh();
       log("Pipeline KPIs refreshed ✅");
     }
 
@@ -456,10 +559,6 @@
     document.getElementById("btnPipeline").addEventListener("click", () => {
       refreshPipelineKpis().catch(e => {
         log("Pipeline KPI ERROR:", e.message);
-        document.getElementById("pipeCount").textContent = "—";
-        document.getElementById("pipeTotal").textContent = "—";
-        document.getElementById("pipeByStatus").textContent = e.message;
-        document.getElementById("pipeByPurpose").textContent = e.message;
       });
     });
 
