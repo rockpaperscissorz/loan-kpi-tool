@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Loan KPI Dashboard</title>
 
-  <!-- SSF guest library -->
   <script src="https://cdn.elliemae.io/elliemae/core/ssf/1.0/elli.ssf.guest-with-polyfill.js"></script>
 
   <style>
@@ -20,7 +19,6 @@
     .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; background:#fff; }
     .kpi-label { font-size: 12px; opacity: 0.75; margin-bottom: 6px; }
     .kpi-value { font-size: 22px; font-weight: 700; }
-    .row { display:flex; gap:10px; flex-wrap:wrap; }
     pre { background:#f7f7f7; padding: 10px; border-radius: 10px; overflow:auto; }
     .warn { border: 1px solid #f0c36d; background:#fff7e6; }
     .field { display:flex; flex-direction:column; gap:4px; }
@@ -30,40 +28,20 @@
 
 <body>
 
-<div class="card">
-  <h2>Loan KPI Dashboard</h2>
-  <div class="muted">
-    Top = SSF current loan. Bottom = Pipeline KPIs via <code>/encompass/v3/loanPipeline</code>.
-  </div>
-
-  <div class="bar">
-    <div class="row">
-      <span class="pill">SSF: <span id="ssfStatus">Checking…</span></span>
-      <span class="pill">Loan: <span id="loanStatus">—</span></span>
-      <span class="pill">Build: <span id="buildStamp">—</span></span>
-    </div>
-
-    <div class="row">
-      <button id="btnRefresh" class="btn">Refresh Loan</button>
-      <button id="btnPipeline" class="btn">Refresh Pipeline</button>
-    </div>
-  </div>
-</div>
-
 <!-- Pipeline KPIs -->
-<div class="card" style="margin-top:12px;">
+<div class="card">
   <h2>Pipeline KPIs (Folder)</h2>
-  <div class="grid">
 
+  <div class="grid">
     <div class="card">
       <div class="field">
-        <label class="muted">Folder name (exact)</label>
+        <label class="muted">Folder name</label>
         <input id="pipeFolder" class="input" value="Pipeline" />
       </div>
 
       <div class="field" style="margin-top:8px;">
         <label class="muted">Limit</label>
-        <input id="pipeLimit" class="input" type="number" value="25" min="1" max="500" />
+        <input id="pipeLimit" class="input" type="number" value="25" />
       </div>
     </div>
 
@@ -81,27 +59,19 @@
       <div class="kpi-label">By Milestone</div>
       <div id="pipeByStatus">—</div>
     </div>
-
   </div>
 </div>
 
-<!-- Debug -->
-<div class="card" style="margin-top:12px;">
-  <pre id="debug"></pre>
-</div>
+<pre id="debug"></pre>
 
 <script>
 const debugEl = document.getElementById("debug");
 const log = (...a) => debugEl.textContent += a.join(" ") + "\n";
 
-document.getElementById("buildStamp").textContent = "2026-02-26";
-
-const ssfLoaded = window.elli && elli.script;
-document.getElementById("ssfStatus").textContent = ssfLoaded ? "Loaded" : "Not loaded";
-
-async function getAccessToken() {
+async function getUserAccessTokenForApi() {
   const auth = await elli.script.getObject("auth");
   const tok = await auth.getAccessToken();
+
   if (tok?.access_token) return tok.access_token;
 
   const resp = await fetch("/api/exchange", {
@@ -109,14 +79,13 @@ async function getAccessToken() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ authCode: tok })
   });
+
   const json = await resp.json();
   return json.access_token;
 }
 
-function buildFolderFilter() {
+function buildPipelineFilterFolderOnly() {
   const folder = document.getElementById("pipeFolder").value.trim();
-  if (!folder) throw new Error("Folder required");
-
   return {
     operator: "and",
     terms: [{
@@ -128,9 +97,10 @@ function buildFolderFilter() {
   };
 }
 
-async function refreshPipeline() {
-  log("Refreshing pipeline…");
-  const token = await getAccessToken();
+async function refreshPipelineKpis() {
+  log("Refreshing V3 pipeline…");
+
+  const token = await getUserAccessTokenForApi();
   const limit = Number(document.getElementById("pipeLimit").value || 25);
 
   const resp = await fetch(
@@ -142,7 +112,7 @@ async function refreshPipeline() {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        filter: buildFolderFilter(),
+        filter: buildPipelineFilterFolderOnly(),
         fields: [
           "Loan.LoanAmount",
           "Loan.MilestoneName",
@@ -153,24 +123,19 @@ async function refreshPipeline() {
   );
 
   const json = await resp.json();
-  log("Pipeline response:", JSON.stringify(json, null, 2));
+  log(JSON.stringify(json, null, 2));
 
-  const items = Array.isArray(json.items) ? json.items : [];
-  const ids = new Set();
+  const items = json.items || [];
   let total = 0;
   const byStatus = {};
 
   for (const l of items) {
-    if (l.loanId) ids.add(l.loanId);
-
-    const amt = Number(l.fields?.["Loan.LoanAmount"] || 0);
-    if (isFinite(amt)) total += amt;
-
+    total += Number(l.fields?.["Loan.LoanAmount"] || 0);
     const ms = l.fields?.["Loan.MilestoneName"] || "Unknown";
     byStatus[ms] = (byStatus[ms] || 0) + 1;
   }
 
-  document.getElementById("pipeCount").textContent = ids.size;
+  document.getElementById("pipeCount").textContent = items.length;
   document.getElementById("pipeTotal").textContent =
     total.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
@@ -178,7 +143,8 @@ async function refreshPipeline() {
     Object.entries(byStatus).map(([k,v]) => `${k}: ${v}`).join(" | ") || "—";
 }
 
-document.getElementById("btnPipeline").addEventListener("click", refreshPipeline);
+document.getElementById("btnPipeline")?.addEventListener("click", refreshPipelineKpis);
 </script>
+
 </body>
 </html>
