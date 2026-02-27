@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Loan KPIs</title>
+  <title>Loan KPI Dashboard</title>
 
   <!-- SSF guest library (CDN) -->
   <script src="https://cdn.elliemae.io/elliemae/core/ssf/1.0/elli.ssf.guest-with-polyfill.js"></script>
@@ -29,9 +29,9 @@
 
 <body>
   <div class="card">
-    <h2>Current Loan KPIs (Minimal)</h2>
+    <h2>Loan KPI Dashboard</h2>
     <div class="muted">
-      Uses SSF <code>loan</code> object (no external API). Auth button included for pipeline expansion.
+      Top section = current open loan (SSF <code>loan</code>). Bottom section = pipeline KPIs (REST API via token exchange).
     </div>
 
     <div class="bar">
@@ -39,16 +39,18 @@
         <span class="pill"><b>SSF:</b> <span id="ssfStatus">Checking…</span></span>
         <span class="pill"><b>Guest init:</b> <span id="guestStatus">Not started</span></span>
         <span class="pill"><b>Loan:</b> <span id="loanStatus">Not loaded</span></span>
+        <span class="pill"><b>Auto-update:</b> <span id="subStatus">Not set</span></span>
       </div>
 
       <div class="row">
-        <button id="btnRefresh" class="btn">Refresh KPIs</button>
-        <button id="btnAuth" class="btn">Get Auth Code</button>
+        <button id="btnRefresh" class="btn">Refresh Loan KPIs</button>
+        <button id="btnPipeline" class="btn">Refresh Pipeline KPIs</button>
         <button id="btnClear" class="btn">Clear Debug</button>
       </div>
     </div>
   </div>
 
+  <!-- Current Loan KPIs -->
   <div class="grid">
     <div class="card">
       <div class="kpi-label">Loan Number</div>
@@ -69,8 +71,8 @@
     </div>
 
     <div class="card">
-      <div class="kpi-label">Milestone</div>
-      <div class="kpi-value" id="kpiMilestone">—</div>
+      <div class="kpi-label">Status</div>
+      <div class="kpi-value" id="kpiStatus">—</div>
       <div class="kpi-sub">Field: 1393</div>
     </div>
 
@@ -87,14 +89,33 @@
     </div>
   </div>
 
-  <div class="card warn" id="authCard" style="margin-top:12px; display:none;">
-    <div class="kpi-label">Auth Code (preview)</div>
-    <div class="kpi-value" style="font-size:14px; font-weight:600;" id="authPreview">—</div>
-    <div class="kpi-sub">
-      This is an <b>auth code</b>. To call Encompass APIs like <code>/loanPipeline</code>, you’ll exchange it server-side.
+  <!-- Pipeline KPIs -->
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-bottom:2px;">Pipeline KPIs (Minimal)</h2>
+    <div class="muted">Counts + totals from <code>/encompass/v1/loanPipeline</code>.</div>
+
+    <div class="grid" style="margin-top:12px;">
+      <div class="card warn">
+        <div class="kpi-label">Loans Returned</div>
+        <div class="kpi-value" id="pipeCount">—</div>
+        <div class="kpi-sub">Using a small limit first (safe starter).</div>
+      </div>
+
+      <div class="card warn">
+        <div class="kpi-label">Total Loan Amount</div>
+        <div class="kpi-value" id="pipeTotal">—</div>
+        <div class="kpi-sub">Sum of returned loans’ amounts.</div>
+      </div>
+
+      <div class="card warn">
+        <div class="kpi-label">By Status</div>
+        <div class="kpi-value" style="font-size:14px; font-weight:600;" id="pipeByStatus">—</div>
+        <div class="kpi-sub">Very simple grouping.</div>
+      </div>
     </div>
   </div>
 
+  <!-- Debug -->
   <div class="card" style="margin-top:12px;">
     <details open>
       <summary>Debug output</summary>
@@ -133,7 +154,7 @@
 
     let loanObj = null;
 
-    // ✅ Critical: initialize guest per ICE sample
+    // ✅ Critical: initialize guest per ICE sample (this is what made yours work)
     (function initGuest() {
       if (!ssfLoaded) {
         document.getElementById("guestStatus").textContent = "SSF not loaded ❌";
@@ -146,7 +167,7 @@
           log("guest.create('', document.head) called ✅");
         } else {
           document.getElementById("guestStatus").textContent = "guest.create not found ⚠️";
-          log("WARNING: elli.script.guest.create not found in this SSF build.");
+          log("WARNING: elli.script.guest.create not found.");
         }
       } catch (e) {
         document.getElementById("guestStatus").textContent = `Init failed ❌ (${e.message})`;
@@ -166,16 +187,14 @@
       return loanObj;
     }
 
-    async function refreshKpis() {
+    async function refreshLoanKpis() {
       try {
         const loan = await ensureLoanObject();
 
-        // Fetch a small set of fields (minimal KPIs)
-        // Using loan.getField() keeps it simple and stable.
         const loanNum = await loan.getField("364");
         const amt     = await loan.getField("1109");
         const rate    = await loan.getField("3");
-        const ms      = await loan.getField("1393");
+        const status  = await loan.getField("1393"); // relabeled to Status
         const purpose = await loan.getField("19");
         const bFirst  = await loan.getField("4000");
         const bLast   = await loan.getField("4002");
@@ -183,49 +202,135 @@
         document.getElementById("kpiLoanNum").textContent = loanNum || "—";
         document.getElementById("kpiAmount").textContent  = formatMoney(amt);
         document.getElementById("kpiRate").textContent    = formatRate(rate);
-        document.getElementById("kpiMilestone").textContent = ms || "—";
-        document.getElementById("kpiPurpose").textContent   = purpose || "—";
-        document.getElementById("kpiBorrower").textContent  = (bFirst || bLast) ? `${bFirst || ""} ${bLast || ""}`.trim() : "—";
+        document.getElementById("kpiStatus").textContent  = status || "—";
+        document.getElementById("kpiPurpose").textContent = purpose || "—";
+        document.getElementById("kpiBorrower").textContent =
+          (bFirst || bLast) ? `${bFirst || ""} ${bLast || ""}`.trim() : "—";
 
-        log("KPIs refreshed ✅");
+        log("Loan KPIs refreshed ✅");
       } catch (e) {
-        document.getElementById("loanStatus").textContent = `Error ❌`;
-        log("KPI refresh ERROR:", e.message);
+        document.getElementById("loanStatus").textContent = "Error ❌";
+        log("Loan KPI refresh ERROR:", e.message);
         console.error(e);
       }
     }
 
-    async function getAuthCode() {
+    // ✅ Loan change subscription (auto-update)
+    function setupLoanSubscription() {
+      if (!ssfLoaded) return;
       try {
-        if (!ssfLoaded) throw new Error("SSF not loaded");
-
-        log("Requesting auth object…");
-        const auth = await withTimeout(elli.script.getObject("auth"), 12000, "auth object");
-        log("Auth object acquired ✅. Calling getAccessToken()…");
-
-        const authCode = await withTimeout(auth.getAccessToken(), 12000, "auth code");
-        const s = String(authCode || "");
-
-        const preview = s ? (s.slice(0, 40) + (s.length > 40 ? "…" : "")) : "—";
-        document.getElementById("authCard").style.display = "block";
-        document.getElementById("authPreview").textContent = preview;
-
-        log("Auth code received ✅ (length):", String(s.length));
+        // Fires when loan changes; simplest is to refresh KPIs.
+        // (ICE examples show elli.script.subscribe('loan','change', ...)) :contentReference[oaicite:2]{index=2}
+        elli.script.subscribe("loan", "change", () => {
+          log("Loan change event fired → refreshing KPIs…");
+          refreshLoanKpis();
+        });
+        document.getElementById("subStatus").textContent = "Enabled ✅";
+        log("Subscribed to loan change ✅");
       } catch (e) {
-        document.getElementById("authCard").style.display = "block";
-        document.getElementById("authPreview").textContent = `Failed: ${e.message}`;
-        log("Auth ERROR:", e.message);
-        console.error(e);
+        document.getElementById("subStatus").textContent = `Failed ❌`;
+        log("Subscribe ERROR:", e.message);
       }
     }
 
-    document.getElementById("btnRefresh").addEventListener("click", refreshKpis);
-    document.getElementById("btnAuth").addEventListener("click", getAuthCode);
+    // ---------- Pipeline KPIs via Token Exchange ----------
+
+    async function getUserAccessTokenForApi() {
+      // Docs indicate auth.getAccessToken returns an object with access_token/token_type/host_name. :contentReference[oaicite:3]{index=3}
+      // Token exchange docs also exist for scenarios where you need a server-side exchange. :contentReference[oaicite:4]{index=4}
+      const auth = await withTimeout(elli.script.getObject("auth"), 12000, "auth object");
+      const tok = await withTimeout(auth.getAccessToken(), 12000, "getAccessToken");
+
+      // Handle both possible shapes defensively:
+      if (tok && typeof tok === "object" && tok.access_token) {
+        return tok.access_token; // direct
+      }
+
+      // If it ever comes back as a string (auth code), exchange it via our /api/exchange endpoint
+      const authCode = String(tok || "");
+      if (!authCode) throw new Error("Auth token/auth code missing");
+
+      const resp = await fetch("/api/exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ authCode })
+      });
+      if (!resp.ok) throw new Error(`Token exchange failed (${resp.status})`);
+      const data = await resp.json();
+      if (!data?.access_token) throw new Error("Token exchange returned no access_token");
+      return data.access_token;
+    }
+
+    async function refreshPipelineKpis() {
+      try {
+        log("Refreshing pipeline KPIs…");
+        const accessToken = await getUserAccessTokenForApi();
+
+        // Minimal starter query (limit small; we can expand/filter later)
+        const url = "https://api.elliemae.com/encompass/v1/loanPipeline?limit=25";
+        const body = {
+          fields: ["Loan.LoanAmount", "Loan.MilestoneName"],
+          // If your tenant requires a filter, we can add it after we confirm response shape.
+        };
+
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body)
+        });
+
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(`loanPipeline ${resp.status}: ${txt}`);
+        }
+
+        const json = await resp.json();
+        const loans = json?.loans || json?.items || [];
+        document.getElementById("pipeCount").textContent = String(loans.length);
+
+        let total = 0;
+        const byStatus = {};
+        for (const l of loans) {
+          const amt = Number(l?.fields?.["Loan.LoanAmount"] ?? l?.LoanAmount ?? l?.loanAmount ?? 0);
+          if (isFinite(amt)) total += amt;
+
+          const st = String(
+            l?.fields?.["Loan.MilestoneName"] ??
+            l?.MilestoneName ??
+            l?.milestoneName ??
+            "Unknown"
+          );
+          byStatus[st] = (byStatus[st] || 0) + 1;
+        }
+
+        document.getElementById("pipeTotal").textContent = formatMoney(total);
+        document.getElementById("pipeByStatus").textContent =
+          Object.keys(byStatus).length
+            ? Object.entries(byStatus).map(([k,v]) => `${k}: ${v}`).join(" | ")
+            : "—";
+
+        log("Pipeline KPIs refreshed ✅");
+        console.log("loanPipeline raw response:", json);
+      } catch (e) {
+        log("Pipeline KPI ERROR:", e.message);
+        console.error(e);
+        document.getElementById("pipeCount").textContent = "—";
+        document.getElementById("pipeTotal").textContent = "—";
+        document.getElementById("pipeByStatus").textContent = e.message;
+      }
+    }
+
+    // Buttons
+    document.getElementById("btnRefresh").addEventListener("click", refreshLoanKpis);
+    document.getElementById("btnPipeline").addEventListener("click", refreshPipelineKpis);
     document.getElementById("btnClear").addEventListener("click", () => debugEl.textContent = "");
 
-    // Optional: auto-refresh once on load (safe; won’t break if no loan is open)
-    // Comment out if you prefer manual only.
-    refreshKpis();
+    // On load: setup subscription + pull current loan KPIs once
+    setupLoanSubscription();
+    refreshLoanKpis();
   </script>
 </body>
 </html>
