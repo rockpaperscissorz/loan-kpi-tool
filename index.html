@@ -14,6 +14,7 @@
     .muted { opacity: 0.75; font-size: 12px; }
     .bar { display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top: 12px; }
     .btn  { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .pill { padding: 4px 10px; border-radius: 999px; border: 1px solid #ddd; font-size: 12px; background: #fff; }
     .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 12px; }
     .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; background:#fff; }
@@ -24,6 +25,11 @@
     pre { background:#f7f7f7; padding: 10px; border-radius: 10px; overflow:auto; }
     code { background:#f7f7f7; padding:2px 6px; border-radius:6px; }
     .warn { border: 1px solid #f0c36d; background:#fff7e6; }
+    .field { display:flex; flex-direction:column; gap:4px; }
+    .input, select {
+      padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background:#fff;
+      font-size: 14px;
+    }
   </style>
 </head>
 
@@ -40,6 +46,7 @@
         <span class="pill"><b>Guest init:</b> <span id="guestStatus">Not started</span></span>
         <span class="pill"><b>Loan:</b> <span id="loanStatus">Not loaded</span></span>
         <span class="pill"><b>Auto-update:</b> <span id="subStatus">Not set</span></span>
+        <span class="pill"><b>Build:</b> <span id="buildStamp">—</span></span>
       </div>
 
       <div class="row">
@@ -95,22 +102,45 @@
     <div class="muted">Counts + totals from <code>/encompass/v1/loanPipeline</code>.</div>
 
     <div class="grid" style="margin-top:12px;">
+      <div class="card">
+        <div class="kpi-label">Filter Mode</div>
+        <div class="row" style="margin-top:6px;">
+          <select id="pipeMode" class="input">
+            <option value="myLoans" selected>My Loans (Loan Officer = current user)</option>
+            <option value="folder">Folder</option>
+          </select>
+
+          <div class="field" style="min-width:260px;">
+            <label class="muted" for="pipeFolder">Folder name (exact)</label>
+            <input id="pipeFolder" class="input" placeholder='e.g. "Active Loans"' value="Pipeline" />
+          </div>
+
+          <div class="field" style="min-width:140px;">
+            <label class="muted" for="pipeLimit">Limit</label>
+            <input id="pipeLimit" class="input" type="number" min="1" max="500" value="25" />
+          </div>
+        </div>
+        <div class="muted" style="margin-top:8px;">
+          Tip: start with <b>My Loans</b>. If that returns data, then switch to <b>Folder</b> once you know the exact folder name.
+        </div>
+      </div>
+
       <div class="card warn">
         <div class="kpi-label">Loans Returned</div>
         <div class="kpi-value" id="pipeCount">—</div>
-        <div class="kpi-sub">Using a small limit first (safe starter).</div>
+        <div class="kpi-sub">Result count (limited)</div>
       </div>
 
       <div class="card warn">
         <div class="kpi-label">Total Loan Amount</div>
         <div class="kpi-value" id="pipeTotal">—</div>
-        <div class="kpi-sub">Sum of returned loans’ amounts.</div>
+        <div class="kpi-sub">Sum of returned loans’ amounts</div>
       </div>
 
       <div class="card warn">
         <div class="kpi-label">By Status</div>
         <div class="kpi-value" style="font-size:14px; font-weight:600;" id="pipeByStatus">—</div>
-        <div class="kpi-sub">Very simple grouping.</div>
+        <div class="kpi-sub">Grouped by milestone/status</div>
       </div>
     </div>
   </div>
@@ -124,12 +154,29 @@
   </div>
 
   <script>
+    // ---------- Logging (console + on-page) ----------
     const debugEl = document.getElementById("debug");
     const log = (...args) => {
       const line = args.map(a => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
-      debugEl.textContent += (debugEl.textContent ? "\n" : "") + line;
+      try {
+        debugEl.textContent += (debugEl.textContent ? "\n" : "") + line;
+      } catch {}
+      try { console.log("[KPI]", ...args); } catch {}
     };
 
+    window.addEventListener("error", (e) => {
+      log("WINDOW ERROR:", e.message, `${e.filename || ""}:${e.lineno || ""}`);
+    });
+    window.addEventListener("unhandledrejection", (e) => {
+      log("UNHANDLED PROMISE REJECTION:", e.reason?.message || String(e.reason));
+    });
+
+    // Build stamp (helps verify cache/version)
+    const BUILD = "2026-02-26T00:00:00Z";
+    document.getElementById("buildStamp").textContent = BUILD;
+    log("BOOT ✅ KPI tool script executing. Build:", BUILD);
+
+    // ---------- SSF status ----------
     const ssfLoaded = (window.elli && elli.script);
     document.getElementById("ssfStatus").textContent = ssfLoaded ? "Loaded ✅" : "NOT loaded ❌";
 
@@ -141,27 +188,32 @@
     }
 
     function formatMoney(n) {
-      const num = Number(n);
+      const num = Number(String(n ?? "").replace(/,/g, ""));
       if (!isFinite(num)) return "—";
       return num.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
     }
 
     function formatRate(n) {
-      const num = Number(n);
+      const num = Number(String(n ?? "").replace(/,/g, ""));
       if (!isFinite(num)) return "—";
       return num.toFixed(3).replace(/\.?0+$/,"") + "%";
     }
 
-    let loanObj = null;
-
-    // ✅ Critical: initialize guest per ICE sample (this is what made yours work)
-    (function initGuest() {
+    // ---------- Guest init (guarded: run once) ----------
+    (function initGuestOnce() {
       if (!ssfLoaded) {
         document.getElementById("guestStatus").textContent = "SSF not loaded ❌";
         return;
       }
+      if (window.__guestInited) {
+        document.getElementById("guestStatus").textContent = "Already initialized ✅";
+        log("guest.create skipped (already initialized) ✅");
+        return;
+      }
+
       try {
         if (elli?.script?.guest?.create) {
+          window.__guestInited = true;
           elli.script.guest.create("", document.head);
           document.getElementById("guestStatus").textContent = "Initialized ✅";
           log("guest.create('', document.head) called ✅");
@@ -174,6 +226,10 @@
         log("Guest init ERROR:", e.message);
       }
     })();
+
+    // ---------- Loan KPIs ----------
+    let loanObj = null;
+    let refreshingLoan = false;
 
     async function ensureLoanObject() {
       if (!ssfLoaded) throw new Error("SSF not loaded");
@@ -188,22 +244,24 @@
     }
 
     async function refreshLoanKpis() {
+      if (refreshingLoan) return;
+      refreshingLoan = true;
       try {
         const loan = await ensureLoanObject();
 
         const loanNum = await loan.getField("364");
         const amt     = await loan.getField("1109");
         const rate    = await loan.getField("3");
-        const status  = await loan.getField("1393"); // relabeled to Status
+        const status  = await loan.getField("1393"); // Status label
         const purpose = await loan.getField("19");
         const bFirst  = await loan.getField("4000");
         const bLast   = await loan.getField("4002");
 
-        document.getElementById("kpiLoanNum").textContent = loanNum || "—";
+        document.getElementById("kpiLoanNum").textContent = (loanNum || "—");
         document.getElementById("kpiAmount").textContent  = formatMoney(amt);
         document.getElementById("kpiRate").textContent    = formatRate(rate);
-        document.getElementById("kpiStatus").textContent  = status || "—";
-        document.getElementById("kpiPurpose").textContent = purpose || "—";
+        document.getElementById("kpiStatus").textContent  = (String(status ?? "").trim() || "—");
+        document.getElementById("kpiPurpose").textContent = (purpose || "—");
         document.getElementById("kpiBorrower").textContent =
           (bFirst || bLast) ? `${bFirst || ""} ${bLast || ""}`.trim() : "—";
 
@@ -211,40 +269,42 @@
       } catch (e) {
         document.getElementById("loanStatus").textContent = "Error ❌";
         log("Loan KPI refresh ERROR:", e.message);
-        console.error(e);
+      } finally {
+        refreshingLoan = false;
       }
     }
 
-    // ✅ Loan change subscription (auto-update)
+    // Loan change subscription (auto-update) + debounce
+    let loanChangeTimer = null;
     function setupLoanSubscription() {
-    if (!ssfLoaded) return;
-    try {
+      if (!ssfLoaded) return;
+      try {
         elli.script.subscribe("loan", "change", () => {
-        log("Loan change event fired → refreshing KPIs…");
-        refreshLoanKpis();
+          clearTimeout(loanChangeTimer);
+          loanChangeTimer = setTimeout(() => {
+            log("Loan change event → refreshing KPIs…");
+            refreshLoanKpis();
+          }, 250);
         });
         document.getElementById("subStatus").textContent = "Enabled ✅";
         log("Subscribed to loan change ✅");
-    } catch (e) {
+      } catch (e) {
         document.getElementById("subStatus").textContent = "Failed ❌";
         log("Subscribe ERROR:", e.message);
-    }
+      }
     }
 
-    // ---------- Pipeline KPIs via Token Exchange ----------
-
+    // ---------- Auth / Token exchange ----------
     async function getUserAccessTokenForApi() {
-      // Docs indicate auth.getAccessToken returns an object with access_token/token_type/host_name. 
-      // Token exchange docs also exist for scenarios where you need a server-side exchange. 
       const auth = await withTimeout(elli.script.getObject("auth"), 12000, "auth object");
       const tok = await withTimeout(auth.getAccessToken(), 12000, "getAccessToken");
 
-      // Handle both possible shapes defensively:
+      // If it's already an access token object, use it
       if (tok && typeof tok === "object" && tok.access_token) {
-        return tok.access_token; // direct
+        return tok.access_token;
       }
 
-      // If it ever comes back as a string (auth code), exchange it via our /api/exchange endpoint
+      // Otherwise treat as auth code and exchange
       const authCode = String(tok || "");
       if (!authCode) throw new Error("Auth token/auth code missing");
 
@@ -253,105 +313,167 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ authCode })
       });
-      if (!resp.ok) throw new Error(`Token exchange failed (${resp.status})`);
+
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`Token exchange failed (${resp.status}): ${txt}`);
+      }
+
       const data = await resp.json();
       if (!data?.access_token) throw new Error("Token exchange returned no access_token");
       return data.access_token;
     }
 
-async function refreshPipelineKpis() {
-  try {
-    log("Refreshing pipeline KPIs…");
-    const accessToken = await getUserAccessTokenForApi();
+    // ---------- Pipeline KPIs ----------
+    let refreshingPipe = false;
 
-    // loanPipeline REQUIRES either filter or loanGuids
-    const url = "https://api.elliemae.com/encompass/v1/loanPipeline?limit=25";
+    function setPipelineButtonsEnabled(enabled) {
+      const btn = document.getElementById("btnPipeline");
+      btn.disabled = !enabled;
+    }
 
-    const body = {
-    filter: {
-        operator: "and",
-        terms: [
-        {
+    function buildPipelineFilter() {
+      const mode = document.getElementById("pipeMode").value;
+      const folder = String(document.getElementById("pipeFolder").value || "").trim();
+
+      if (mode === "folder") {
+        if (!folder) throw new Error("Folder mode selected, but folder name is blank.");
+        return {
+          operator: "and",
+          terms: [{
             canonicalName: "Loan.LoanFolder",
-            value: "Pipeline",     // change to the exact folder name you use in Encompass
-            matchType: "exact",    // ✅ must be one of the valid lowercase matchTypes
+            value: folder,
+            matchType: "exact",
             include: true
-        }
-        ]
-    },
-    fields: ["Loan.LoanAmount", "Loan.MilestoneName"]
-    };
+          }]
+        };
+      }
 
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
+      // Default: myLoans
+      return {
+        operator: "and",
+        terms: [{
+          canonicalName: "Loan.LoanOfficer.UserId",
+          value: "",              // current user
+          matchType: "exact",
+          include: true
+        }]
+      };
+    }
+
+    async function refreshPipelineKpis() {
+      if (refreshingPipe) return;
+      refreshingPipe = true;
+      setPipelineButtonsEnabled(false);
+
+      try {
+        log("Refreshing pipeline KPIs…");
+        const accessToken = await getUserAccessTokenForApi();
+
+        const limit = Math.max(1, Math.min(500, Number(document.getElementById("pipeLimit").value || 25)));
+        const url = `https://api.elliemae.com/encompass/v1/loanPipeline?limit=${limit}`;
+
+        const filter = buildPipelineFilter();
+
+        // Request folder too so you can verify you're actually hitting the folder you think you are
+        const body = {
+          filter,
+          fields: ["Loan.LoanAmount", "Loan.MilestoneName", "Loan.LoanFolder"]
+        };
+
+        log("loanPipeline request body:", body);
+
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(body)
+        });
+
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(`loanPipeline ${resp.status}: ${txt}`);
+        }
+
+        const json = await resp.json();
+        const loans = json?.loans || json?.items || [];
+        log("loanPipeline response received ✅");
+        log(`Loans returned: ${loans.length}`);
+
+        // Minimal KPI calculations
+        let total = 0;
+        const byStatus = {};
+
+        for (const l of loans) {
+          const amtVal =
+            l?.fields?.["Loan.LoanAmount"] ??
+            l?.LoanAmount ??
+            l?.loanAmount ??
+            0;
+
+          const amt = Number(String(amtVal ?? "").replace(/,/g, ""));
+          if (isFinite(amt)) total += amt;
+
+          const statusRaw =
+            l?.fields?.["Loan.MilestoneName"] ??
+            l?.MilestoneName ??
+            l?.milestoneName ??
+            "";
+
+          const status = String(statusRaw).trim() || "Unknown";
+          byStatus[status] = (byStatus[status] || 0) + 1;
+        }
+
+        document.getElementById("pipeCount").textContent = String(loans.length);
+        document.getElementById("pipeTotal").textContent = formatMoney(total);
+
+        const byStatusText = Object.entries(byStatus)
+          .sort((a,b) => b[1] - a[1])
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(" | ");
+
+        document.getElementById("pipeByStatus").textContent = byStatusText || "—";
+
+        log("Pipeline KPIs refreshed ✅");
+
+        // Helpful one-liner when you're troubleshooting 0 loans:
+        if (loans.length === 0) {
+          const mode = document.getElementById("pipeMode").value;
+          log("No loans returned. Notes:");
+          log("- If mode is 'folder', folder name must match exactly and user must have access + pipeline visibility.");
+          log("- If mode is 'myLoans' and still 0, user may have no loans assigned or permissions restrict pipeline access.");
+          log("Current mode:", mode);
+        }
+      } catch (e) {
+        log("Pipeline KPI ERROR:", e.message);
+        document.getElementById("pipeCount").textContent = "—";
+        document.getElementById("pipeTotal").textContent = "—";
+        document.getElementById("pipeByStatus").textContent = e.message;
+      } finally {
+        refreshingPipe = false;
+        setPipelineButtonsEnabled(true);
+      }
+    }
+
+    // ---------- Buttons ----------
+    document.getElementById("btnRefresh").addEventListener("click", () => {
+      log("Clicked: Refresh Loan KPIs");
+      refreshLoanKpis();
     });
 
-    if (!resp.ok) {
-      const txt = await resp.text();
-      throw new Error(`loanPipeline ${resp.status}: ${txt}`);
-    }
+    document.getElementById("btnPipeline").addEventListener("click", () => {
+      log("Clicked: Refresh Pipeline KPIs");
+      refreshPipelineKpis();
+    });
 
-    const json = await resp.json();
-    log("loanPipeline response received ✅");
+    document.getElementById("btnClear").addEventListener("click", () => {
+      debugEl.textContent = "";
+      log("Debug cleared ✅");
+    });
 
-    const loans = json?.loans || json?.items || [];
-    log(`Loans returned: ${loans.length}`);
-
-    // --- minimal KPI calculations ---
-    let total = 0;
-    const byStatus = {};
-
-    for (const l of loans) {
-      const amt =
-        Number(
-          l?.fields?.["Loan.LoanAmount"] ??
-          l?.LoanAmount ??
-          l?.loanAmount ??
-          0
-        );
-
-      if (isFinite(amt)) total += amt;
-
-      const status =
-        l?.fields?.["Loan.MilestoneName"] ??
-        l?.MilestoneName ??
-        l?.milestoneName ??
-        "Unknown";
-
-      byStatus[status] = (byStatus[status] || 0) + 1;
-    }
-
-   document.getElementById("pipeCount").textContent = String(loans.length);
-    document.getElementById("pipeTotal").textContent = formatMoney(total);
-
-    const byStatusText = Object.entries(byStatus)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join(" | ");
-
-    document.getElementById("pipeByStatus").textContent = byStatusText || "—";
-
-    log("Pipeline KPIs refreshed ✅");
-  } catch (e) {
-    log("Pipeline KPI ERROR:", e.message);
-    console.error(e);
-
-    document.getElementById("pipeCount").textContent = "—";
-    document.getElementById("pipeTotal").textContent = "—";
-    document.getElementById("pipeByStatus").textContent = e.message;
-  }
-}
-
-    // Buttons
-    document.getElementById("btnRefresh").addEventListener("click", refreshLoanKpis);
-    document.getElementById("btnPipeline").addEventListener("click", refreshPipelineKpis);
-    document.getElementById("btnClear").addEventListener("click", () => debugEl.textContent = "");
-
-    // On load: setup subscription + pull current loan KPIs once
+    // ---------- On load ----------
     setupLoanSubscription();
     refreshLoanKpis();
   </script>
