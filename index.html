@@ -3,72 +3,106 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SSF Object Diagnostics</title>
+  <title>Loan KPIs</title>
 
+  <!-- SSF guest library (CDN) -->
   <script src="https://cdn.elliemae.io/elliemae/core/ssf/1.0/elli.ssf.guest-with-polyfill.js"></script>
 
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px 14px; margin-top: 12px; }
-    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    .btn  { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    h2 { margin: 0 0 6px; }
     .muted { opacity: 0.75; font-size: 12px; }
-    pre { background: #f7f7f7; padding: 10px; border-radius: 10px; overflow: auto; }
+    .bar { display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top: 12px; }
+    .btn  { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+    .pill { padding: 4px 10px; border-radius: 999px; border: 1px solid #ddd; font-size: 12px; background: #fff; }
+    .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 12px; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 14px; background:#fff; }
+    .kpi-label { font-size: 12px; opacity: 0.75; margin-bottom: 6px; }
+    .kpi-value { font-size: 22px; font-weight: 700; line-height: 1.15; word-break: break-word; }
+    .kpi-sub { margin-top: 6px; font-size: 12px; opacity: 0.75; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    pre { background:#f7f7f7; padding: 10px; border-radius: 10px; overflow:auto; }
     code { background:#f7f7f7; padding:2px 6px; border-radius:6px; }
+    .warn { border: 1px solid #f0c36d; background:#fff7e6; }
   </style>
 </head>
 
 <body>
-  <div class="card" style="border:4px dashed red;">
-    <div style="font-size:18px;font-weight:700;">PROOF OF LIFE</div>
-    <div class="muted">Rendered at: <span id="ts">—</span></div>
-    <div class="muted">Tip: For <code>loan</code> object, open a loan first, then launch the tool.</div>
+  <div class="card">
+    <h2>Current Loan KPIs (Minimal)</h2>
+    <div class="muted">
+      Uses SSF <code>loan</code> object (no external API). Auth button included for pipeline expansion.
+    </div>
+
+    <div class="bar">
+      <div class="row">
+        <span class="pill"><b>SSF:</b> <span id="ssfStatus">Checking…</span></span>
+        <span class="pill"><b>Guest init:</b> <span id="guestStatus">Not started</span></span>
+        <span class="pill"><b>Loan:</b> <span id="loanStatus">Not loaded</span></span>
+      </div>
+
+      <div class="row">
+        <button id="btnRefresh" class="btn">Refresh KPIs</button>
+        <button id="btnAuth" class="btn">Get Auth Code</button>
+        <button id="btnClear" class="btn">Clear Debug</button>
+      </div>
+    </div>
   </div>
 
-  <div class="card">
-    <div><b>SSF status:</b> <span id="ssfStatus">Checking…</span></div>
-    <div><b>Guest init:</b> <span id="guestStatus">Not started</span></div>
-    <div class="muted" style="margin-top:6px;">
-      SSF loaded only means the library downloaded; the host must still “wire” objects.
-      We call <code>elli.script.guest.create('', document.head)</code> per ICE sample.
+  <div class="grid">
+    <div class="card">
+      <div class="kpi-label">Loan Number</div>
+      <div class="kpi-value" id="kpiLoanNum">—</div>
+      <div class="kpi-sub">Field: 364</div>
+    </div>
+
+    <div class="card">
+      <div class="kpi-label">Loan Amount</div>
+      <div class="kpi-value" id="kpiAmount">—</div>
+      <div class="kpi-sub">Field: 1109</div>
+    </div>
+
+    <div class="card">
+      <div class="kpi-label">Interest Rate</div>
+      <div class="kpi-value" id="kpiRate">—</div>
+      <div class="kpi-sub">Field: 3</div>
+    </div>
+
+    <div class="card">
+      <div class="kpi-label">Milestone</div>
+      <div class="kpi-value" id="kpiMilestone">—</div>
+      <div class="kpi-sub">Field: 1393</div>
+    </div>
+
+    <div class="card">
+      <div class="kpi-label">Loan Purpose</div>
+      <div class="kpi-value" id="kpiPurpose">—</div>
+      <div class="kpi-sub">Field: 19</div>
+    </div>
+
+    <div class="card">
+      <div class="kpi-label">Borrower Name</div>
+      <div class="kpi-value" id="kpiBorrower">—</div>
+      <div class="kpi-sub">Fields: 4000 + 4002</div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="row">
-      <button id="btnUser" class="btn">Test User Object</button>
-      <span><b>User:</b> <span id="userStatus">Not started</span></span>
+  <div class="card warn" id="authCard" style="margin-top:12px; display:none;">
+    <div class="kpi-label">Auth Code (preview)</div>
+    <div class="kpi-value" style="font-size:14px; font-weight:600;" id="authPreview">—</div>
+    <div class="kpi-sub">
+      This is an <b>auth code</b>. To call Encompass APIs like <code>/loanPipeline</code>, you’ll exchange it server-side.
     </div>
-    <div class="muted" style="margin-top:8px;">If this times out, SSF host wiring isn’t active for your page.</div>
   </div>
 
-  <div class="card">
-    <div class="row">
-      <button id="btnLoan" class="btn">Test Loan Object</button>
-      <span><b>Loan:</b> <span id="loanStatus">Not started</span></span>
-    </div>
-    <div class="muted" style="margin-top:8px;">Requires a loan open. If no loan open, this may timeout.</div>
-  </div>
-
-  <div class="card">
-    <div class="row">
-      <button id="btnAuth" class="btn">Test Auth Code</button>
-      <span><b>Auth:</b> <span id="authStatus">Not started</span></span>
-    </div>
-    <div class="muted" style="margin-top:8px;">
-      Uses: <code>var auth = await elli.script.getObject("auth"); var authCode = await auth.getAccessToken();</code>
-      (authCode must be exchanged for an API access token).
-    </div>
-
-    <details style="margin-top:10px;" open>
+  <div class="card" style="margin-top:12px;">
+    <details open>
       <summary>Debug output</summary>
       <pre id="debug"></pre>
     </details>
   </div>
 
   <script>
-    document.getElementById("ts").textContent = new Date().toString();
-
     const debugEl = document.getElementById("debug");
     const log = (...args) => {
       const line = args.map(a => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ");
@@ -78,8 +112,28 @@
     const ssfLoaded = (window.elli && elli.script);
     document.getElementById("ssfStatus").textContent = ssfLoaded ? "Loaded ✅" : "NOT loaded ❌";
 
-    // IMPORTANT: initialize SSF guest (per ICE sample README)
-    // Without this, getObject(...) can hang.
+    function withTimeout(promise, ms, label) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`Timed out waiting for ${label}`)), ms))
+      ]);
+    }
+
+    function formatMoney(n) {
+      const num = Number(n);
+      if (!isFinite(num)) return "—";
+      return num.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+    }
+
+    function formatRate(n) {
+      const num = Number(n);
+      if (!isFinite(num)) return "—";
+      return num.toFixed(3).replace(/\.?0+$/,"") + "%";
+    }
+
+    let loanObj = null;
+
+    // ✅ Critical: initialize guest per ICE sample
     (function initGuest() {
       if (!ssfLoaded) {
         document.getElementById("guestStatus").textContent = "SSF not loaded ❌";
@@ -100,64 +154,78 @@
       }
     })();
 
-    function withTimeout(promise, ms, label) {
-      return Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error(`Timed out waiting for ${label}`)), ms))
-      ]);
+    async function ensureLoanObject() {
+      if (!ssfLoaded) throw new Error("SSF not loaded");
+      if (loanObj) return loanObj;
+
+      document.getElementById("loanStatus").textContent = "Loading…";
+      log("Requesting loan object…");
+      loanObj = await withTimeout(elli.script.getObject("loan"), 12000, "loan object");
+      document.getElementById("loanStatus").textContent = "Ready ✅";
+      log("Loan object acquired ✅");
+      return loanObj;
     }
 
-    async function getObjectWithTimeout(name, ms=12000) {
-      log(`Calling elli.script.getObject("${name}")…`);
-      return withTimeout(elli.script.getObject(name), ms, `${name} object`);
+    async function refreshKpis() {
+      try {
+        const loan = await ensureLoanObject();
+
+        // Fetch a small set of fields (minimal KPIs)
+        // Using loan.getField() keeps it simple and stable.
+        const loanNum = await loan.getField("364");
+        const amt     = await loan.getField("1109");
+        const rate    = await loan.getField("3");
+        const ms      = await loan.getField("1393");
+        const purpose = await loan.getField("19");
+        const bFirst  = await loan.getField("4000");
+        const bLast   = await loan.getField("4002");
+
+        document.getElementById("kpiLoanNum").textContent = loanNum || "—";
+        document.getElementById("kpiAmount").textContent  = formatMoney(amt);
+        document.getElementById("kpiRate").textContent    = formatRate(rate);
+        document.getElementById("kpiMilestone").textContent = ms || "—";
+        document.getElementById("kpiPurpose").textContent   = purpose || "—";
+        document.getElementById("kpiBorrower").textContent  = (bFirst || bLast) ? `${bFirst || ""} ${bLast || ""}`.trim() : "—";
+
+        log("KPIs refreshed ✅");
+      } catch (e) {
+        document.getElementById("loanStatus").textContent = `Error ❌`;
+        log("KPI refresh ERROR:", e.message);
+        console.error(e);
+      }
     }
 
-    document.getElementById("btnUser").addEventListener("click", async () => {
-      if (!ssfLoaded) return;
-      document.getElementById("userStatus").textContent = "Requesting…";
+    async function getAuthCode() {
       try {
-        const user = await getObjectWithTimeout("user", 12000);
-        document.getElementById("userStatus").textContent = "OK ✅";
-        log("User object acquired ✅");
-        console.log("User object:", user);
-      } catch (e) {
-        document.getElementById("userStatus").textContent = `Failed ❌ (${e.message})`;
-        log("User ERROR:", e.message);
-        console.error(e);
-      }
-    });
+        if (!ssfLoaded) throw new Error("SSF not loaded");
 
-    document.getElementById("btnLoan").addEventListener("click", async () => {
-      if (!ssfLoaded) return;
-      document.getElementById("loanStatus").textContent = "Requesting…";
-      try {
-        const loan = await getObjectWithTimeout("loan", 12000);
-        document.getElementById("loanStatus").textContent = "OK ✅";
-        log("Loan object acquired ✅");
-        console.log("Loan object:", loan);
-      } catch (e) {
-        document.getElementById("loanStatus").textContent = `Failed ❌ (${e.message})`;
-        log("Loan ERROR:", e.message);
-        console.error(e);
-      }
-    });
-
-    document.getElementById("btnAuth").addEventListener("click", async () => {
-      if (!ssfLoaded) return;
-      document.getElementById("authStatus").textContent = "Requesting…";
-      try {
-        var auth = await getObjectWithTimeout("auth", 12000);
+        log("Requesting auth object…");
+        const auth = await withTimeout(elli.script.getObject("auth"), 12000, "auth object");
         log("Auth object acquired ✅. Calling getAccessToken()…");
-        var authCode = await withTimeout(auth.getAccessToken(), 12000, "auth code");
-        log("Auth code length:", String(String(authCode || "").length));
-        log("Auth code preview:", String(authCode || "").slice(0, 40) + "…");
-        document.getElementById("authStatus").textContent = "OK ✅";
+
+        const authCode = await withTimeout(auth.getAccessToken(), 12000, "auth code");
+        const s = String(authCode || "");
+
+        const preview = s ? (s.slice(0, 40) + (s.length > 40 ? "…" : "")) : "—";
+        document.getElementById("authCard").style.display = "block";
+        document.getElementById("authPreview").textContent = preview;
+
+        log("Auth code received ✅ (length):", String(s.length));
       } catch (e) {
-        document.getElementById("authStatus").textContent = `Failed ❌ (${e.message})`;
+        document.getElementById("authCard").style.display = "block";
+        document.getElementById("authPreview").textContent = `Failed: ${e.message}`;
         log("Auth ERROR:", e.message);
         console.error(e);
       }
-    });
+    }
+
+    document.getElementById("btnRefresh").addEventListener("click", refreshKpis);
+    document.getElementById("btnAuth").addEventListener("click", getAuthCode);
+    document.getElementById("btnClear").addEventListener("click", () => debugEl.textContent = "");
+
+    // Optional: auto-refresh once on load (safe; won’t break if no loan is open)
+    // Comment out if you prefer manual only.
+    refreshKpis();
   </script>
 </body>
 </html>
