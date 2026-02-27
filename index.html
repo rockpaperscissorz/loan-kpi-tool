@@ -38,7 +38,7 @@
   <div class="card">
     <h2>Pipeline KPI Dashboard</h2>
     <div class="muted">
-      Folder list + selection uses V3 (<code>/encompass/v3/loanFolders</code>). KPIs use V1 (<code>/encompass/v1/loanPipeline</code>).
+      Folder list from V3 (<code>/encompass/v3/loanFolders</code>). KPIs from V1 (<code>/encompass/v1/loanPipeline</code>).
       Filter includes <b>every loan in the selected folder</b> with no other conditions.
     </div>
 
@@ -59,7 +59,9 @@
   <!-- Folder selector + Limit -->
   <div class="card" style="margin-top:12px;">
     <h2 style="margin-bottom:2px;">Folder Selection</h2>
-    <div class="muted">Choose a folder from V3. We resolve its <code>folderName</code> and pass it to V1 as <code>LoanFolder.FolderName</code>.</div>
+    <div class="muted">
+      Dropdown values are the folder names returned by V3. We pass the selected name to V1 as <code>LoanFolder.FolderName</code>.
+    </div>
 
     <div class="row" style="margin-top:10px;">
       <div class="field">
@@ -76,7 +78,7 @@
     </div>
 
     <div class="muted" style="margin-top:8px;">
-      Resolved folder name (used in V1 filter): <code id="resolvedFolderName">—</code>
+      Selected folder (used in V1 filter): <code id="resolvedFolderName">—</code>
     </div>
   </div>
 
@@ -91,7 +93,7 @@
     <div class="card warn">
       <div class="kpi-label">Total Loan Amount</div>
       <div class="kpi-value" id="pipeTotal">—</div>
-      <div class="kpi-sub">Sum of returned loans’ amounts</div>
+      <div class="kpi-sub">Sum of returned loans’ amounts (Field 1109)</div>
     </div>
 
     <div class="card warn">
@@ -178,7 +180,6 @@
     }
 
     // ---------- API Server ----------
-    // If your environment uses a different API server, update this constant.
     const API_SERVER = "https://api.elliemae.com";
 
     // ---------- Folder dropdown (V3) ----------
@@ -187,8 +188,8 @@
     const resolvedFolderNameEl = document.getElementById("resolvedFolderName");
     const btnPipeline = document.getElementById("btnPipeline");
 
-    let selectedFolderId = null;
     let selectedFolderName = null;
+    let foldersLoaded = false;
 
     function setFolderUiState({ loading, ready, message }) {
       folderStatus.textContent = message || (loading ? "Loading…" : ready ? "Ready ✅" : "Not loaded");
@@ -196,18 +197,13 @@
       btnPipeline.disabled = !ready || !selectedFolderName;
     }
 
-    // Attempt to normalize folder list shapes (V3 responses vary by env/version)
     function extractFolderList(json) {
-      // common shapes: { loanFolders: [...] }, { items: [...] }, [...] (array)
+      // Your env returns a raw array (as shown in debug). Still handle other common shapes.
       if (Array.isArray(json)) return json;
       if (Array.isArray(json?.loanFolders)) return json.loanFolders;
       if (Array.isArray(json?.items)) return json.items;
       if (Array.isArray(json?.folders)) return json.folders;
       return [];
-    }
-
-    function getFolderId(f) {
-      return f?.id || f?.folderId || f?.loanFolderId || f?.guid || f?.folderGuid || null;
     }
 
     function getFolderName(f) {
@@ -220,7 +216,6 @@
 
       const token = await getUserAccessTokenForApi();
 
-      // V3 list endpoint
       const url = `${API_SERVER}/encompass/v3/loanFolders?start=0&limit=2000`;
       log("V3 loanFolders list GET:", url);
 
@@ -243,88 +238,51 @@
       const folders = extractFolderList(json);
       log(`V3 folders returned: ${folders.length}`);
 
-      const normalized = folders
-        .map(f => ({ id: getFolderId(f), name: getFolderName(f) }))
-        .filter(x => x.id && x.name)
-        .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      // 🔑 Only require folderName (no ID needed in your response shape)
+      const names = folders
+        .map(getFolderName)
+        .filter(Boolean)
+        .map(n => String(n).trim())
+        .filter(n => n.length > 0);
 
-      if (!normalized.length) {
+      const uniqueNames = Array.from(new Set(names)).sort((a,b) => a.localeCompare(b));
+
+      if (!uniqueNames.length) {
         log("V3 folder list raw response:", json);
-        throw new Error("No folders found (or response shape not recognized).");
+        throw new Error("No folder names found in V3 response.");
       }
 
       folderSelect.innerHTML =
         `<option value="">Select a folder…</option>` +
-        normalized.map(x => `<option value="${String(x.id)}">${String(x.name)}</option>`).join("");
+        uniqueNames.map(name => `<option value="${name}">${name}</option>`).join("");
 
-      // Default-select "Pipeline" if present
-      const pipeline = normalized.find(x => String(x.name).toLowerCase() === "pipeline");
-      if (pipeline) {
-        folderSelect.value = String(pipeline.id);
-      }
-
+      foldersLoaded = true;
       setFolderUiState({ loading: false, ready: true, message: "Ready ✅" });
 
-      // Resolve selected folder immediately (if preselected)
-      if (folderSelect.value) {
+      // Default-select "Pipeline" if present
+      const pipelineName = uniqueNames.find(n => n.toLowerCase() === "pipeline");
+      if (pipelineName) {
+        folderSelect.value = pipelineName;
         await onFolderChanged();
+      } else {
+        // no default selected
+        selectedFolderName = null;
+        resolvedFolderNameEl.textContent = "—";
+        btnPipeline.disabled = true;
       }
-    }
-
-    async function resolveFolderNameById(folderId) {
-      const token = await getUserAccessTokenForApi();
-      const url = `${API_SERVER}/encompass/v3/loanFolders/${encodeURIComponent(String(folderId))}`;
-      log("V3 loanFolders detail GET:", url);
-
-      const resp = await fetch(url, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      const text = await resp.text();
-      if (!resp.ok) {
-        log("V3 loanFolders detail ERROR status:", String(resp.status));
-        log("V3 loanFolders detail ERROR body:", text);
-        throw new Error(`V3 loanFolders detail failed (${resp.status})`);
-      }
-
-      let json;
-      try { json = JSON.parse(text); }
-      catch { throw new Error("V3 loanFolders detail returned non-JSON"); }
-
-      const name = json?.folderName || json?.name || json?.FolderName || json?.Name;
-      if (!name) {
-        log("V3 loanFolders detail raw response:", json);
-        throw new Error("Folder detail did not include folderName.");
-      }
-
-      return String(name).trim();
     }
 
     async function onFolderChanged() {
-      const folderId = folderSelect.value;
-      selectedFolderId = folderId || null;
-      selectedFolderName = null;
-      resolvedFolderNameEl.textContent = "—";
-      btnPipeline.disabled = true;
+      selectedFolderName = folderSelect.value || null;
+      resolvedFolderNameEl.textContent = selectedFolderName || "—";
+      btnPipeline.disabled = !foldersLoaded || !selectedFolderName;
 
-      if (!selectedFolderId) {
-        log("Folder cleared.");
-        return;
-      }
+      // Clear KPIs when changing folder
+      document.getElementById("pipeCount").textContent = "—";
+      document.getElementById("pipeTotal").textContent = "—";
+      document.getElementById("pipeByStatus").textContent = "—";
 
-      try {
-        log("Folder selected (id):", selectedFolderId);
-        const name = await resolveFolderNameById(selectedFolderId);
-        selectedFolderName = name;
-        resolvedFolderNameEl.textContent = selectedFolderName;
-        btnPipeline.disabled = false;
-        log("Resolved folder name ✅:", selectedFolderName);
-      } catch (e) {
-        log("Folder resolve ERROR:", e.message);
-        resolvedFolderNameEl.textContent = `ERROR: ${e.message}`;
-        btnPipeline.disabled = true;
-      }
+      log("Folder selected:", selectedFolderName || "(none)");
     }
 
     folderSelect.addEventListener("change", () => {
@@ -333,7 +291,7 @@
 
     // ---------- Pipeline KPIs (V1) ----------
     function buildPipelineFilterFolderOnly() {
-      if (!selectedFolderName) throw new Error("Folder name not resolved.");
+      if (!selectedFolderName) throw new Error("No folder selected.");
       return {
         operator: "and",
         terms: [{
@@ -348,7 +306,7 @@
     async function refreshPipelineKpis() {
       try {
         if (!selectedFolderName) {
-          log("Folder name not resolved yet.");
+          log("No folder selected.");
           return;
         }
 
@@ -387,6 +345,7 @@
         const loans = json?.loans || json?.items || [];
         log("V1 loanPipeline loans returned:", String(loans.length));
 
+        // KPI calculations: total amount + milestone grouping
         let total = 0;
         const byMilestone = {};
 
