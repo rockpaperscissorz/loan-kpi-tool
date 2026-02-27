@@ -1372,8 +1372,8 @@ pre{
     const MS_DATE_COND_APPROVAL = "Fields.Log.MS.Date.Cond. Approval";
     const MS_DATE_RESUBMITTAL   = "Fields.Log.MS.Date.Resubmittal";
     const MS_DATE_CLOSING       = "Fields.Log.MS.Date.Closing";
-    $("msFieldLoanApp").textContent = MS_DATE_LOAN_APP;
-    $("msFieldProcessing").textContent = MS_DATE_PROCESSING;
+    if ($("msFieldLoanApp")) $("msFieldLoanApp").textContent = MS_DATE_LOAN_APP;
+    if ($("msFieldProcessing")) $("msFieldProcessing").textContent = MS_DATE_PROCESSING;
 
     function normalizeLoan(loan){
       const loanNumber = safe(getField(loan, "Loan.LoanNumber"), "");
