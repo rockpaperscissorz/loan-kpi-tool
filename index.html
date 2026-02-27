@@ -114,5 +114,21 @@
       }
     });
   </script>
+  <button id="btnLoan">Test Loan Object</button>
+<span id="loanStatus">—</span>
+
+<script>
+document.getElementById("btnLoan").addEventListener("click", async () => {
+  try {
+    document.getElementById("loanStatus").textContent = "Requesting loan…";
+    const loanObj = await elli.script.getObject("loan");
+    document.getElementById("loanStatus").textContent = "Loan object OK ✅";
+    console.log("Loan object:", loanObj);
+  } catch (e) {
+    document.getElementById("loanStatus").textContent = "Loan failed ❌";
+    console.error(e);
+  }
+});
+</script>
 </body>
 </html>
