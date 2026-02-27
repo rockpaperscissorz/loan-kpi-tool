@@ -27,7 +27,7 @@
     .input, select {
       padding: 10px 12px; border-radius: 12px; border: 1px solid #d8d8d8; background:#fff;
       font-size: 14px;
-      min-width: 260px;
+      min-width: 220px;
     }
 
     /* Layout helpers */
@@ -57,7 +57,7 @@
     <h2>Pipeline KPI Dashboard</h2>
     <div class="muted">
       Folder list from V3 (<code>/encompass/v3/loanFolders</code>). KPIs from V3 (<code>/encompass/v3/loanPipeline</code>).
-      Includes <b>every loan in the selected folder</b> with no other conditions.
+      Includes <b>every loan in the selected folder</b> with optional filters for Loan Officer and State.
     </div>
 
     <div class="bar">
@@ -84,9 +84,31 @@
         </select>
       </div>
 
-      <div class="field" style="min-width:160px;">
+      <div class="field">
+        <label class="muted" for="loSelect">Loan Officer</label>
+        <select id="loSelect" class="input" disabled>
+          <option value="">All LOs</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="muted" for="stateSelect">State</label>
+        <select id="stateSelect" class="input">
+          <option value="">All States</option>
+          <option value="CT">CT</option>
+          <option value="MA">MA</option>
+          <option value="RI">RI</option>
+          <option value="VT">VT</option>
+          <option value="NY">NY</option>
+          <option value="NJ">NJ</option>
+          <option value="OH">OH</option>
+          <option value="PA">PA</option>
+        </select>
+      </div>
+
+      <div class="field" style="min-width:140px;">
         <label class="muted" for="pipeLimit">Limit</label>
-        <input id="pipeLimit" class="input" type="number" min="1" max="1000" value="1000" style="min-width:160px;" />
+        <input id="pipeLimit" class="input" type="number" min="1" max="1000" value="1000" style="min-width:140px;" />
       </div>
 
       <div class="field" style="min-width:240px;">
@@ -247,11 +269,16 @@
 
     // ---------- Folder dropdown ----------
     const folderSelect = document.getElementById("folderSelect");
+    const loSelect = document.getElementById("loSelect");
+    const stateSelect = document.getElementById("stateSelect");
+
     const folderStatus = document.getElementById("folderStatus");
     const resolvedFolderNameEl = document.getElementById("resolvedFolderName");
     const btnPipeline = document.getElementById("btnPipeline");
 
     let selectedFolderName = null;
+    let selectedLO = "";
+    let selectedState = "";
 
     function extractFolderList(json) {
       if (Array.isArray(json)) return json;
@@ -311,10 +338,28 @@
       ctx.clearRect(0, 0, c.width, c.height);
     }
 
+    function escapeHtml(s) {
+      return String(s ?? "")
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
+    }
+
     function onFolderChanged() {
       selectedFolderName = folderSelect.value || null;
       resolvedFolderNameEl.textContent = selectedFolderName || "—";
       btnPipeline.disabled = !selectedFolderName;
+
+      // Reset filters when folder changes
+      selectedLO = "";
+      selectedState = "";
+      if (loSelect) {
+        loSelect.innerHTML = `<option value="">All LOs</option>`;
+        loSelect.disabled = true;
+      }
+      if (stateSelect) stateSelect.value = "";
 
       // Clear headline KPIs
       document.getElementById("kpiLoans").textContent = "—";
@@ -335,6 +380,17 @@
     }
 
     folderSelect.addEventListener("change", onFolderChanged);
+
+    // Hook changes for filters
+    loSelect.addEventListener("change", () => {
+      selectedLO = loSelect.value || "";
+      log("LO filter changed:", selectedLO || "(All)");
+    });
+
+    stateSelect.addEventListener("change", () => {
+      selectedState = stateSelect.value || "";
+      log("State filter changed:", selectedState || "(All)");
+    });
 
     // ---------- Response helpers ----------
     function summarizeJsonShape(json) {
@@ -361,15 +417,6 @@
 
     function sortedEntries(obj) {
       return Object.entries(obj).sort((a,b) => b[1] - a[1]);
-    }
-
-    function escapeHtml(s) {
-      return String(s ?? "")
-        .replace(/&/g,"&amp;")
-        .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;")
-        .replace(/"/g,"&quot;")
-        .replace(/'/g,"&#039;");
     }
 
     function renderTopListWithVolume(containerId, entries, volByKey, topN=10) {
@@ -402,6 +449,20 @@
           <div class="right kpi-mini">${isFinite(r.avgDays) ? r.avgDays.toFixed(1) : "—"} d</div>
         </div>
       `).join("");
+    }
+
+    function rebuildLODropdownFromLoans(loEntries) {
+      const names = loEntries
+        .map(([n]) => String(n ?? "").trim())
+        .filter(n => n.length > 0);
+
+      const unique = Array.from(new Set(names));
+
+      loSelect.innerHTML =
+        `<option value="">All LOs</option>` +
+        unique.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+
+      loSelect.disabled = false;
     }
 
     // ---------- Simple bar chart renderer ----------
@@ -455,11 +516,13 @@
     }
 
     // -------- V3 pipeline fetch helper --------
-    async function fetchLoanPipeline(token, url, selectedFolderName, fields, limit) {
+    async function fetchLoanPipeline(token, url, selectedFolderName, fields, filterObj) {
       const body = {
         fields,
         loanFolders: [ selectedFolderName ]
       };
+
+      if (filterObj) body.filter = filterObj;
 
       log("V3 loanPipeline request URL:", url);
       log("V3 loanPipeline request body:", body);
@@ -496,6 +559,31 @@
       return loans;
     }
 
+    function buildFilterObject() {
+      const terms = [];
+
+      if (selectedLO) {
+        terms.push({
+          canonicalName: "Fields.317",
+          value: selectedLO,
+          matchType: "exact",
+          include: true
+        });
+      }
+
+      if (selectedState) {
+        terms.push({
+          canonicalName: "Fields.12",
+          value: selectedState,
+          matchType: "exact",
+          include: true
+        });
+      }
+
+      if (!terms.length) return null;
+      return { operator: "and", terms };
+    }
+
     // -------- V3 pipeline KPIs --------
     async function refreshPipelineKpis() {
       if (!selectedFolderName) {
@@ -507,18 +595,22 @@
       const limit = Math.max(1, Math.min(1000, Number(document.getElementById("pipeLimit").value || 1000)));
       const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
 
-      log("Refreshing pipeline KPIs (V3)… Folder:", selectedFolderName);
+      const filterObj = buildFilterObject();
 
-      // PASS 1: pull core fields to discover milestones + compute most KPIs
+      log("Refreshing pipeline KPIs (V3)… Folder:", selectedFolderName);
+      log("Active filters:", { selectedLO: selectedLO || "(All)", selectedState: selectedState || "(All)" });
+
+      // PASS 1: pull core fields to discover milestones + compute most KPIs (+ state field)
       const coreFields = [
         "Loan.LoanAmount",
         "Loan.LoanNumber",
         "Fields.Log.MS.CurrentMilestone",
         "Fields.19",
-        "Fields.317"
+        "Fields.317",
+        "Fields.12"
       ];
 
-      const loans1 = await fetchLoanPipeline(token, url, selectedFolderName, coreFields, limit);
+      const loans1 = await fetchLoanPipeline(token, url, selectedFolderName, coreFields, filterObj);
 
       // Compute KPIs (counts/volume/by LO/by purpose/by milestone)
       let total = 0;
@@ -575,19 +667,25 @@
         volByLO[lo] = (volByLO[lo] || 0) + (isFinite(amt) ? amt : 0);
       }
 
+      const milestoneEntries = sortedEntries(byMilestone);
+      const purposeEntries = sortedEntries(byPurpose);
+      const loEntries = sortedEntries(byLO);
+
+      // Rebuild LO dropdown ONLY when not locked to a specific LO (or if dropdown is empty)
+      // This keeps the dropdown valid for the current dataset.
+      rebuildLODropdownFromLoans(loEntries);
+
       // PASS 2: pull ONLY the duration fields needed (based on milestones found)
-      // Field pattern: Fields.Log.MS.Duration.[Milestone Name]
       const durationFields = Array.from(milestonesFound)
         .filter(Boolean)
         .map(ms => `Fields.Log.MS.Duration.${ms}`);
 
-      // Always include loan number so we can map durations back to milestone buckets safely
       const durationRequestFields = ["Loan.LoanNumber", ...durationFields];
 
       log("Milestones discovered (pass 1):", Array.from(milestonesFound));
       log("Duration fields requested (pass 2):", durationFields);
 
-      const loans2 = await fetchLoanPipeline(token, url, selectedFolderName, durationRequestFields, limit);
+      const loans2 = await fetchLoanPipeline(token, url, selectedFolderName, durationRequestFields, filterObj);
 
       const durationSumByMilestone = {};
       const durationCountByMilestone = {};
@@ -603,7 +701,6 @@
         const durationKey = `Fields.Log.MS.Duration.${ms}`;
         const durRaw = l?.fields?.[durationKey];
 
-        // Best-effort numeric parse (handles "12", "12.3", "12 days", etc.)
         const dur = Number(String(durRaw ?? "").replace(/[^0-9.]/g, ""));
         if (!isFinite(dur)) continue;
 
@@ -627,17 +724,13 @@
       const uniqueLOs = Object.keys(byLO).filter(k => k !== "Null").length || (Object.keys(byLO).length);
       document.getElementById("kpiLoCount").textContent = String(uniqueLOs);
 
-      // Render charts + lists
-      const milestoneEntries = sortedEntries(byMilestone);
-      const purposeEntries = sortedEntries(byPurpose);
-      const loEntries = sortedEntries(byLO);
-
       // LO chart label includes LO volume: "Name • $2.35M"
       const loChartEntries = loEntries.map(([loName, count]) => {
         const vol = volByLO[loName] || 0;
         return [`${loName} • ${formatMoneyShort(vol)}`, count];
       });
 
+      // Render charts + lists
       renderBarChart("milestoneChart", milestoneEntries, 12);
       renderBarChart("loChart", loChartEntries, 12);
       renderBarChart("purposeChart", purposeEntries, 14);
