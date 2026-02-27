@@ -153,11 +153,6 @@
         <input id="ageDays" class="input" type="number" min="1" max="365" value="45" />
       </div>
 
-      <div class="field small">
-        <label class="muted">Loan Type Field</label>
-        <input id="rateTypeField" class="input" value="Fields.1172" />
-      </div>
-    </div>
 
     <div class="divider"></div>
 
@@ -858,7 +853,7 @@
     function normalizeLoan(loan){
       const loanNumber = safe(getField(loan, "Loan.LoanNumber") ?? loan?.LoanNumber ?? loan?.loanNumber, "");
       const amt = toNumber(getField(loan, "Loan.LoanAmount") ?? loan?.LoanAmount ?? loan?.loanAmount);
-
+      const startedDate = parseDate(getField(loan, "Fields.Log.MS.Date.Started"));
       const lo = safe(getField(loan, "Fields.317") ?? getField(loan, "Loan.LoanOfficer") ?? getField(loan, "Loan.LoanOfficerName"), "Unassigned");
 
       const purposeRaw = normStr(getField(loan, "Fields.19") ?? getField(loan, "Loan.LoanPurpose"));
@@ -871,8 +866,7 @@
 
       const amortType = normStr(getField(loan, "Fields.608"));
 
-      const rateField = $("rateTypeField").value.trim() || "Fields.1172";
-      const loanTypeRaw = normStr(getField(loan, rateField));
+      const loanTypeRaw = normStr(getField(loan, "Fields.1172"));
 
       const msLoanAppDate = parseDate(getField(loan, MS_DATE_LOAN_APP));
       const msProcessingDate = parseDate(getField(loan, MS_DATE_PROCESSING));
@@ -883,13 +877,15 @@
         loanNumber,
         amt,
         lo,
-        amortType,
-        purpose: purposeRaw,
-        loanType: loanTypeRaw,
+        purpose,
+        loanType,
         rateBucket,
         milestone,
-        appDate, discDate, closeDate, uwDate,
-        msLoanAppDate, msProcessingDate,
+        appDate,
+        discDate,
+        closeDate,
+        uwDate,
+        startedDate, // ✅ store it
         _raw: loan
       };
     }
@@ -1261,7 +1257,6 @@
         folders: msFolders?.getSelected?.() || [],
         limit: $("limit").value,
         ageDays: $("ageDays").value,
-        rateTypeField: $("rateTypeField").value,
         filters: {
           lo: msLo.getSelected(),
           amort: msAmort.getSelected(),
@@ -1279,7 +1274,6 @@
 
       $("limit").value = v.limit ?? $("limit").value;
       $("ageDays").value = v.ageDays ?? $("ageDays").value;
-      $("rateTypeField").value = v.rateTypeField ?? $("rateTypeField").value;
 
       msLo.setSelected(v.filters?.lo || []);
       msAmort.setSelected(v.filters?.amort || []);
@@ -1329,7 +1323,7 @@
       const limit = Math.max(1, Math.min(1000, Number($("limit").value || 1000)));
 
       const uwField = "Fields.2301";
-      const rateField = $("rateTypeField").value.trim() || "Fields.1172";
+      const rateField = "Fields.1172";
 
       // Fields needed for:
       // - existing KPIs
@@ -1342,6 +1336,7 @@
         "Fields.608",
         "Fields.19",
         "Fields.Log.MS.CurrentMilestone",
+        "Fields.Log.MS.Date.Started",
         "Fields.745",
         "Fields.3142",
         "Fields.748",
@@ -1367,7 +1362,19 @@
       msMilestone.setOptions(uniq(normalized.map(l => l.milestone)));
 
       const filtered = applyFilters(normalized);
+      
+      log("---- Milestone Started Date (KPI Loans Only) ----");
 
+      filtered.forEach(l => {
+        if (!l.startedDate) return;
+
+        log({
+          loanNumber: l.loanNumber,
+          loanOfficer: l.lo,
+          appDate: l.appDate ? l.appDate.toLocaleDateString() : null,
+          milestoneStarted: l.startedDate.toLocaleDateString()
+        });
+      });
       state.loansRaw = normalized;
       state.loansFiltered = filtered;
 
