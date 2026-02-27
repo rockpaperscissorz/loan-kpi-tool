@@ -273,8 +273,8 @@ async function refreshPipelineKpis() {
         terms: [
         {
             canonicalName: "Loan.LoanFolder",
-            value: "Pipeline",
-            matchType: "Equals",
+            value: "Pipeline",     // change to the exact folder name you use in Encompass
+            matchType: "exact",    // ✅ must be one of the valid lowercase matchTypes
             include: true
         }
         ]
