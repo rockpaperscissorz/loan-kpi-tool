@@ -432,6 +432,73 @@ pre{
 .section-head { display:flex; flex-direction:column; gap:2px; }
 .section-title { font-size:16px; font-weight:900; letter-spacing:.3px; }
 .section-sub { font-size:12px; color:var(--muted); }
+
+/* ✅ Turn Times (Option 2) table */
+.tt-table{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin-top:10px;
+}
+
+.tt-row{
+  display:grid;
+  grid-template-columns: 1fr 120px 90px; /* label | avg | health */
+  gap:10px;
+  align-items:center;
+  padding:10px 12px;
+  border:1px solid rgba(17,17,17,.06);
+  border-radius:12px;
+  background: rgba(255,255,255,.65);
+}
+
+@media (max-width: 560px){
+  .tt-row{ grid-template-columns: 1fr; }
+}
+
+.tt-label{
+  font-weight:800;
+  letter-spacing:.1px;
+}
+
+.tt-sub{
+  font-size:12px;
+  color:var(--muted);
+  margin-top:2px;
+}
+
+.tt-avg{
+  text-align:right;
+  font-variant-numeric: tabular-nums;
+  font-weight:900;
+  font-size:16px;
+}
+
+.tt-pill{
+  justify-self:end;
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:900;
+  border:1px solid rgba(17,17,17,.10);
+  background:#fff;
+}
+
+.tt-pill.ok{
+  background: rgba(11,122,44,.10);
+  border-color: rgba(11,122,44,.30);
+  color: rgba(11,122,44,.95);
+}
+.tt-pill.warn{
+  background: rgba(176,122,0,.12);
+  border-color: rgba(176,122,0,.35);
+  color: rgba(140,96,0,.95);
+}
+.tt-pill.bad{
+  background: rgba(176,0,32,.10);
+  border-color: rgba(176,0,32,.30);
+  color: rgba(176,0,32,.95);
+}
   </style>
 </head>
 
@@ -615,12 +682,13 @@ pre{
 
     <div class="card span-6">
       <div class="kpi-label chart-title">Milestone Turn Times (Average Days)</div>
-      <canvas id="c_turnTimes" height="160"></canvas>
+
+      <!-- ✅ Option 2 UI -->
+      <div id="turnTimesTable" class="tt-table">—</div>
+
       <div class="kpi-sub">
-        Using milestone date fields:
-        <code id="msFieldLoanApp">Fields.Log.MS.Date.Loan App</code> and
-        <code id="msFieldProcessing">Fields.Log.MS.Date.Processing</code>.
-        If this chart is blank, verify milestone date field syntax in your tenant.
+        Health: <b>≤ 10 days</b> = green, <b>11–20</b> = yellow, <b>21+</b> = red.
+        <span class="muted">Averages are computed only across loans that have both milestone dates populated.</span>
       </div>
     </div>
 
@@ -1626,6 +1694,62 @@ pre{
       }
     }
 
+
+    function ttHealthClass(avgDays){
+  if (!Number.isFinite(avgDays)) return "";
+  if (avgDays <= 10) return "ok";       // ✅ under/at 10 = green
+  if (avgDays <= 20) return "warn";     // ✅ 11–20 = yellow
+  return "bad";                         // ✅ 21+ = red
+}
+
+function ttHealthText(avgDays){
+  if (!Number.isFinite(avgDays)) return "—";
+  if (avgDays <= 10) return "Good";
+  if (avgDays <= 20) return "Watch";
+  return "Risk";
+}
+
+function renderTurnTimesTable(k){
+  const el = $("turnTimesTable");
+  if (!el) return;
+
+  const rows = [
+    { label: "Loan Submit → Loan App Complete", avg: k.avgSubmitToAppComplete, hint: `${MS_DATE_LOAN_APP} - Fields.745` },
+    { label: "Loan App → Processing", avg: k.avgAppToProcessing, hint: `${MS_DATE_PROCESSING} - ${MS_DATE_LOAN_APP}` },
+
+    { label: "Process → Cond. Approval", avg: k.avgProcessingToCondApproval, hint: `${MS_DATE_COND_APPROVAL} - ${MS_DATE_PROCESSING}` },
+    { label: "Cond. Approval → Resubmittal", avg: k.avgCondApprovalToResubmittal, hint: `${MS_DATE_RESUBMITTAL} - ${MS_DATE_COND_APPROVAL}` },
+    { label: "Resubmit → Approval", avg: k.avgResubmitToApproval, hint: `${MS_DATE_APPROVAL} - ${MS_DATE_RESUBMITTAL}` },
+    { label: "Approval → Closing", avg: k.avgApprovalToClosing, hint: `${MS_DATE_CLOSING} - ${MS_DATE_APPROVAL}` }
+  ];
+
+  const usable = rows.filter(r => Number.isFinite(r.avg));
+
+  if (!usable.length){
+    el.innerHTML = `<div class="muted">No usable milestone date pairs found. Verify milestone date field syntax and that loans have those dates populated.</div>`;
+    return;
+  }
+
+  el.innerHTML = usable.map(r => {
+    const cls = ttHealthClass(r.avg);
+    const txt = ttHealthText(r.avg);
+    return `
+      <div class="tt-row">
+        <div>
+          <div class="tt-label">${escapeHtml(r.label)}</div>
+          <div class="tt-sub">${escapeHtml(r.hint)}</div>
+        </div>
+
+        <div class="tt-avg">${r.avg.toFixed(1)}d</div>
+
+        <div class="tt-pill ${cls}">
+          ${escapeHtml(txt)}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
     function renderBreakdowns(k){
       barChart("c_milestone", k.milestoneEntries, { maxBars: 10 });
 
@@ -1644,10 +1768,7 @@ pre{
         ["Approval → Closing", k.avgApprovalToClosing]
       ].filter(e => Number.isFinite(e[1]));
 
-      barChartOverlayLabels("c_turnTimes", turnEntries, {
-        maxBars: 10,
-        valueFormat: (v) => v.toFixed(1) + "d"
-      });
+      renderTurnTimesTable(k);
 
       if (!turnEntries.length){
         log("Turn Times: no usable data found for milestone date fields. Verify field syntax:");
