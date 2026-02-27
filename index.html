@@ -3,9 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>SSF Object Diagnostics (guest.create)</title>
+  <title>SSF Object Diagnostics</title>
 
-  <!-- SSF guest library (CDN) -->
   <script src="https://cdn.elliemae.io/elliemae/core/ssf/1.0/elli.ssf.guest-with-polyfill.js"></script>
 
   <style>
@@ -23,16 +22,15 @@
   <div class="card" style="border:4px dashed red;">
     <div style="font-size:18px;font-weight:700;">PROOF OF LIFE</div>
     <div class="muted">Rendered at: <span id="ts">—</span></div>
-    <div class="muted">
-      Tip: For <code>loan</code> object, open a loan first, then launch this Custom Tool.
-    </div>
+    <div class="muted">Tip: For <code>loan</code> object, open a loan first, then launch the tool.</div>
   </div>
 
   <div class="card">
     <div><b>SSF status:</b> <span id="ssfStatus">Checking…</span></div>
     <div><b>Guest init:</b> <span id="guestStatus">Not started</span></div>
     <div class="muted" style="margin-top:6px;">
-      We explicitly call <code>elli.script.guest.create('', document.head)</code> (per ICE sample README) so object requests don’t hang.
+      SSF loaded only means the library downloaded; the host must still “wire” objects.
+      We call <code>elli.script.guest.create('', document.head)</code> per ICE sample.
     </div>
   </div>
 
@@ -41,9 +39,7 @@
       <button id="btnUser" class="btn">Test User Object</button>
       <span><b>User:</b> <span id="userStatus">Not started</span></span>
     </div>
-    <div class="muted" style="margin-top:8px;">
-      If this times out, the SSF host wiring still isn’t active for your tool instance.
-    </div>
+    <div class="muted" style="margin-top:8px;">If this times out, SSF host wiring isn’t active for your page.</div>
   </div>
 
   <div class="card">
@@ -56,12 +52,12 @@
 
   <div class="card">
     <div class="row">
-      <button id="btnAuth" class="btn">Test Auth (getAccessToken)</button>
-      <button id="btnClear" class="btn">Clear Debug</button>
+      <button id="btnAuth" class="btn">Test Auth Code</button>
       <span><b>Auth:</b> <span id="authStatus">Not started</span></span>
     </div>
     <div class="muted" style="margin-top:8px;">
       Uses: <code>var auth = await elli.script.getObject("auth"); var authCode = await auth.getAccessToken();</code>
+      (authCode must be exchanged for an API access token).
     </div>
 
     <details style="margin-top:10px;" open>
@@ -82,7 +78,28 @@
     const ssfLoaded = (window.elli && elli.script);
     document.getElementById("ssfStatus").textContent = ssfLoaded ? "Loaded ✅" : "NOT loaded ❌";
 
-    // Timeout helper so hangs become visible failures
+    // IMPORTANT: initialize SSF guest (per ICE sample README)
+    // Without this, getObject(...) can hang.
+    (function initGuest() {
+      if (!ssfLoaded) {
+        document.getElementById("guestStatus").textContent = "SSF not loaded ❌";
+        return;
+      }
+      try {
+        if (elli?.script?.guest?.create) {
+          elli.script.guest.create("", document.head);
+          document.getElementById("guestStatus").textContent = "Initialized ✅";
+          log("guest.create('', document.head) called ✅");
+        } else {
+          document.getElementById("guestStatus").textContent = "guest.create not found ⚠️";
+          log("WARNING: elli.script.guest.create not found in this SSF build.");
+        }
+      } catch (e) {
+        document.getElementById("guestStatus").textContent = `Init failed ❌ (${e.message})`;
+        log("Guest init ERROR:", e.message);
+      }
+    })();
+
     function withTimeout(promise, ms, label) {
       return Promise.race([
         promise,
@@ -90,59 +107,13 @@
       ]);
     }
 
-    async function initGuest() {
-      if (!ssfLoaded) {
-        document.getElementById("guestStatus").textContent = "SSF not loaded ❌";
-        return false;
-      }
-
-      try {
-        document.getElementById("guestStatus").textContent = "Initializing…";
-
-        // Per ICE sample README: initialize guest so objects + subscriptions work.
-        // Some builds expose guest under elli.script.guest; others use elli.script.guest.create.
-        if (elli?.script?.guest?.create) {
-          elli.script.guest.create("", document.head);
-          document.getElementById("guestStatus").textContent = "Initialized ✅ (guest.create)";
-          log("guest.create('', document.head) called ✅");
-          return true;
-        }
-
-        // Fallback: guest.create may not exist in some builds; we log it explicitly.
-        document.getElementById("guestStatus").textContent = "guest.create not found ❌";
-        log("WARNING: elli.script.guest.create not found in this SSF build.");
-        log("SSF is loaded, but this build may auto-init or expose guest differently.");
-        return true; // allow tests to proceed; maybe auto-init works
-      } catch (e) {
-        document.getElementById("guestStatus").textContent = `Init failed ❌ (${e.message})`;
-        log("Guest init ERROR:", e.message);
-        console.error(e);
-        return false;
-      }
-    }
-
-    let guestReady = false;
-    (async () => { guestReady = await initGuest(); })();
-
-    async function getObjectWithTimeout(name, ms = 12000) {
+    async function getObjectWithTimeout(name, ms=12000) {
       log(`Calling elli.script.getObject("${name}")…`);
       return withTimeout(elli.script.getObject(name), ms, `${name} object`);
     }
 
-    document.getElementById("btnClear").addEventListener("click", () => {
-      debugEl.textContent = "";
-      document.getElementById("userStatus").textContent = "Not started";
-      document.getElementById("loanStatus").textContent = "Not started";
-      document.getElementById("authStatus").textContent = "Not started";
-    });
-
     document.getElementById("btnUser").addEventListener("click", async () => {
-      if (!ssfLoaded || !guestReady) {
-        document.getElementById("userStatus").textContent = "SSF/guest not ready ❌";
-        log("User test aborted: SSF/guest not ready.");
-        return;
-      }
-
+      if (!ssfLoaded) return;
       document.getElementById("userStatus").textContent = "Requesting…";
       try {
         const user = await getObjectWithTimeout("user", 12000);
@@ -157,12 +128,7 @@
     });
 
     document.getElementById("btnLoan").addEventListener("click", async () => {
-      if (!ssfLoaded || !guestReady) {
-        document.getElementById("loanStatus").textContent = "SSF/guest not ready ❌";
-        log("Loan test aborted: SSF/guest not ready.");
-        return;
-      }
-
+      if (!ssfLoaded) return;
       document.getElementById("loanStatus").textContent = "Requesting…";
       try {
         const loan = await getObjectWithTimeout("loan", 12000);
@@ -177,23 +143,14 @@
     });
 
     document.getElementById("btnAuth").addEventListener("click", async () => {
-      if (!ssfLoaded || !guestReady) {
-        document.getElementById("authStatus").textContent = "SSF/guest not ready ❌";
-        log("Auth test aborted: SSF/guest not ready.");
-        return;
-      }
-
+      if (!ssfLoaded) return;
       document.getElementById("authStatus").textContent = "Requesting…";
       try {
-        // Your requested pattern:
         var auth = await getObjectWithTimeout("auth", 12000);
         log("Auth object acquired ✅. Calling getAccessToken()…");
-
         var authCode = await withTimeout(auth.getAccessToken(), 12000, "auth code");
-        const s = String(authCode || "");
-
-        log("Auth code length:", String(s.length));
-        log("Auth code preview:", s.slice(0, 40) + (s.length > 40 ? "…" : ""));
+        log("Auth code length:", String(String(authCode || "").length));
+        log("Auth code preview:", String(authCode || "").slice(0, 40) + "…");
         document.getElementById("authStatus").textContent = "OK ✅";
       } catch (e) {
         document.getElementById("authStatus").textContent = `Failed ❌ (${e.message})`;
