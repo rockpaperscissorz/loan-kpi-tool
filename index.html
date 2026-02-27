@@ -255,8 +255,8 @@
       // No other filters/conditions: we ONLY set loanFolders to the selected folder
       const body = {
         fields: [
-          "Fields.1109",
-          "Loan.CurrentMilestoneName"
+          "Loan.LoanAmount",
+          "Loan.MilestoneName"
         ],
         loanFolders: [ selectedFolderName ]
       };
@@ -286,8 +286,8 @@
 
       for (const l of loans) {
         const amtVal =
-          l?.fields?.["Fields.1109"] ??
-          l?.fields?.["Fields.1109.Value"] ??
+          l?.fields?.["Loan.LoanAmount"] ??
+          l?.fields?.["Loan.LoanAmount.Value"] ??
           l?.loanAmount ??
           0;
 
@@ -295,7 +295,7 @@
         if (isFinite(amt)) total += amt;
 
         const msRaw =
-          l?.fields?.["Loan.CurrentMilestoneName"] ??
+          l?.fields?.["Loan.MilestoneName"] ??
           l?.milestoneName ??
           "Unknown";
 
