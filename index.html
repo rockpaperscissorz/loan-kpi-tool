@@ -477,6 +477,8 @@
     const folderStatus = $("folderStatus");
     const btnRefresh = $("btnRefresh");
 
+    let msFolders; // will be initialized after createMultiSelect is defined
+
     function extractFolders(payload){
       if (Array.isArray(payload)) return payload;
       if (Array.isArray(payload?.loanFolders)) return payload.loanFolders;
@@ -487,7 +489,6 @@
 
     async function loadFolders(){
       folderStatus.textContent = "Loading…";
-      folderSelect.disabled = true;
       btnRefresh.disabled = true;
 
       const token = await getAccessToken();
@@ -629,7 +630,7 @@
     const msPurpose = createMultiSelect(document.querySelector('[data-ms="purpose"]'), { placeholder:"All Purposes", onChange: () => {} });
     const msRateType = createMultiSelect(document.querySelector('[data-ms="rateType"]'), { placeholder:"All Loan Types", onChange: () => {} });
     const msMilestone = createMultiSelect(document.querySelector('[data-ms="milestone"]'), { placeholder:"All Milestones", onChange: () => {} });
-    const msFolders = createMultiSelect(document.querySelector('[data-ms="folders"]'), {
+    msFolders = createMultiSelect(document.querySelector('[data-ms="folders"]'), {
     placeholder: "Pipeline",
     onChange: () => { btnRefresh.disabled = (msFolders.getSelected().length === 0); }
   });
@@ -1127,7 +1128,7 @@
     function captureView(){
       return {
         name: `View ${new Date().toLocaleString()}`,
-        folder: folderSelect.value || "",
+        folders: msFolders?.getSelected?.() || [],
         limit: $("limit").value,
         ageDays: $("ageDays").value,
         uwField: $("uwField").value,
@@ -1143,18 +1144,25 @@
 
     function applyView(v){
       if (!v) return;
-      folderSelect.value = v.folder || folderSelect.value;
+
+      // ✅ Folder(s) now come from multi-select
+      if (Array.isArray(v.folders) && msFolders){
+        msFolders.setSelected(v.folders);
+      }
+
       $("limit").value = v.limit ?? $("limit").value;
       $("ageDays").value = v.ageDays ?? $("ageDays").value;
       $("uwField").value = v.uwField ?? $("uwField").value;
       $("rateTypeField").value = v.rateTypeField ?? $("rateTypeField").value;
 
+      // options must already be loaded; setSelected will ignore invalids
       msLo.setSelected(v.filters?.lo || []);
       msPurpose.setSelected(v.filters?.purpose || []);
       msRateType.setSelected(v.filters?.rateType || []);
       msMilestone.setSelected(v.filters?.milestone || []);
 
-      btnRefresh.disabled = !folderSelect.value;
+      // ✅ Refresh enabled only if at least one folder is selected
+      btnRefresh.disabled = (msFolders.getSelected().length === 0);
     }
 
     $("btnSaveView").addEventListener("click", () => {
