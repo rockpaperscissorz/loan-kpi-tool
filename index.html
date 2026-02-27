@@ -94,9 +94,15 @@
     </div>
 
     <div class="card warn">
-      <div class="kpi-label">By Milestone</div>
+      <div class="kpi-label">By Milestone (CurrentMilestone)</div>
       <div class="kpi-value" style="font-size:14px; font-weight:600;" id="pipeByStatus">—</div>
-      <div class="kpi-sub">Grouped by milestone</div>
+      <div class="kpi-sub">Grouped by <code>Fields.Log.MS.CurrentMilestone</code></div>
+    </div>
+
+    <div class="card warn">
+      <div class="kpi-label">By Loan Purpose (Field 19)</div>
+      <div class="kpi-value" style="font-size:14px; font-weight:600;" id="pipeByPurpose">—</div>
+      <div class="kpi-sub">Grouped by <code>Fields.19</code></div>
     </div>
   </div>
 
@@ -233,172 +239,147 @@
       document.getElementById("pipeCount").textContent = "—";
       document.getElementById("pipeTotal").textContent = "—";
       document.getElementById("pipeByStatus").textContent = "—";
+      document.getElementById("pipeByPurpose").textContent = "—";
 
       log("Folder selected:", selectedFolderName || "(none)");
     }
 
     folderSelect.addEventListener("change", onFolderChanged);
-    
+
     function summarizeJsonShape(json) {
-    const keys = json && typeof json === "object" ? Object.keys(json) : [];
-    const counts = {
+      const keys = json && typeof json === "object" ? Object.keys(json) : [];
+      const counts = {
         items: Array.isArray(json?.items) ? json.items.length : null,
         loans: Array.isArray(json?.loans) ? json.loans.length : null,
         loanPipeline: Array.isArray(json?.loanPipeline) ? json.loanPipeline.length : null,
         pipeline: Array.isArray(json?.pipeline) ? json.pipeline.length : null,
         data: Array.isArray(json?.data) ? json.data.length : null
-    };
-    return { keys, counts };
+      };
+      return { keys, counts };
     }
 
     function pickFirstArray(json) {
-    if (Array.isArray(json?.items)) return json.items;
-    if (Array.isArray(json?.loans)) return json.loans;
-    if (Array.isArray(json?.loanPipeline)) return json.loanPipeline;
-    if (Array.isArray(json?.pipeline)) return json.pipeline;
-    if (Array.isArray(json?.data)) return json.data;
-    if (Array.isArray(json)) return json;
-    return [];
+      if (Array.isArray(json?.items)) return json.items;
+      if (Array.isArray(json?.loans)) return json.loans;
+      if (Array.isArray(json?.loanPipeline)) return json.loanPipeline;
+      if (Array.isArray(json?.pipeline)) return json.pipeline;
+      if (Array.isArray(json?.data)) return json.data;
+      if (Array.isArray(json)) return json;
+      return [];
     }
+
     // -------- V3 pipeline KPIs --------
     async function refreshPipelineKpis() {
-    if (!selectedFolderName) {
+      if (!selectedFolderName) {
         log("No folder selected.");
         return;
-    }
+      }
 
-    const token = await getUserAccessTokenForApi();
-    const limit = Math.max(1, Math.min(1000, Number(document.getElementById("pipeLimit").value || 1000)));
-    const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
+      const token = await getUserAccessTokenForApi();
+      const limit = Math.max(1, Math.min(1000, Number(document.getElementById("pipeLimit").value || 1000)));
+      const url = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=${limit}`;
 
-    // 1) Primary call: with folder restriction (what we actually want)
-    const body = {
+      // IMPORTANT UPDATES:
+      // - Request CurrentMilestone from Fields.Log.MS.CurrentMilestone (instead of Loan.MilestoneName)
+      // - Request Loan Purpose from Fields.19 (Field 19)
+      const body = {
         fields: [
-        "Loan.LoanAmount",
-        "Loan.MilestoneName",
-        "Loan.LoanNumber"
+          "Loan.LoanAmount",
+          "Loan.LoanNumber",
+          "Fields.Log.MS.CurrentMilestone",
+          "Fields.19"
         ],
         loanFolders: [ selectedFolderName ]
-    };
+      };
 
-    log("Refreshing pipeline KPIs (V3)… Folder:", selectedFolderName);
-    log("V3 loanPipeline request URL:", url);
-    log("V3 loanPipeline request body:", body);
+      log("Refreshing pipeline KPIs (V3)… Folder:", selectedFolderName);
+      log("V3 loanPipeline request URL:", url);
+      log("V3 loanPipeline request body:", body);
 
-    const resp = await fetch(url, {
+      const resp = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify(body)
-    });
+      });
 
-    const text = await resp.text();
-    log("V3 response status:", String(resp.status));
-    log("V3 response text length:", String(text.length));
+      const text = await resp.text();
+      log("V3 response status:", String(resp.status));
+      log("V3 response text length:", String(text.length));
 
-    if (!resp.ok) {
+      if (!resp.ok) {
         log("V3 ERROR body:", text);
         throw new Error(`v3 loanPipeline ${resp.status}`);
-    }
+      }
 
-    let json;
-    try { json = JSON.parse(text); }
-    catch {
+      let json;
+      try { json = JSON.parse(text); }
+      catch {
         log("V3 raw response (non-JSON):", text.slice(0, 1000));
         throw new Error("V3 returned non-JSON");
-    }
+      }
 
-    const shape = summarizeJsonShape(json);
-    log("V3 response keys:", shape.keys.join(", "));
-    log("V3 response counts:", shape.counts);
+      const shape = summarizeJsonShape(json);
+      log("V3 response keys:", shape.keys.join(", "));
+      log("V3 response counts:", shape.counts);
 
-    const loans = pickFirstArray(json);
-    log("V3 detected loans array length:", String(loans.length));
+      const loans = pickFirstArray(json);
+      log("V3 detected loans array length:", String(loans.length));
 
-    if (loans.length > 0) {
+      if (loans.length > 0) {
         log("V3 sample loan[0]:", loans[0]);
         if (loans.length > 1) log("V3 sample loan[1]:", loans[1]);
-    }
+      }
 
-    // If no loans with folder restriction, do a diagnostic call WITHOUT folder restriction.
-    if (loans.length === 0) {
-        log("No loans returned WITH folder restriction. Running diagnostic call WITHOUT loanFolders…");
+      // KPI calculations
+      let total = 0;
+      const byMilestone = {};
+      const byPurpose = {};
 
-        const diagUrl = `${API_SERVER}/encompass/v3/loanPipeline?start=0&limit=5`;
-        const diagBody = {
-        fields: ["Loan.LoanNumber", "Loan.LoanAmount", "Loan.MilestoneName"]
-        // intentionally NO loanFolders
-        };
-
-        const diagResp = await fetch(diagUrl, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(diagBody)
-        });
-
-        const diagText = await diagResp.text();
-        log("DIAG status:", String(diagResp.status));
-        log("DIAG text length:", String(diagText.length));
-
-        if (!diagResp.ok) {
-        log("DIAG ERROR body:", diagText);
-        throw new Error(`DIAG v3 loanPipeline ${diagResp.status}`);
-        }
-
-        let diagJson;
-        try { diagJson = JSON.parse(diagText); }
-        catch {
-        log("DIAG raw response (non-JSON):", diagText.slice(0, 1000));
-        throw new Error("DIAG returned non-JSON");
-        }
-
-        const diagShape = summarizeJsonShape(diagJson);
-        log("DIAG keys:", diagShape.keys.join(", "));
-        log("DIAG counts:", diagShape.counts);
-
-        const diagLoans = pickFirstArray(diagJson);
-        log("DIAG detected loans array length:", String(diagLoans.length));
-
-        if (diagLoans.length > 0) {
-        log("DIAG sample loan[0]:", diagLoans[0]);
-        }
-
-        log("Interpretation:");
-        log("- If DIAG returns loans but folder call returns 0 => folder name mismatch OR tenant expects different property than loanFolders.");
-        log("- If DIAG returns 0 loans too => token/scopes/permissions don’t allow pipeline data OR endpoint not enabled for this user.");
-    }
-
-    // If we have loans, compute KPIs using multiple fallbacks for field paths
-    let total = 0;
-    const byMilestone = {};
-
-    for (const l of loans) {
+      for (const l of loans) {
         const amtVal =
-        l?.fields?.["Loan.LoanAmount"] ??
-        l?.fields?.["Loan.LoanAmount.Value"] ??
-        l?.fields?.["Fields.1109"] ??
-        l?.LoanAmount ?? l?.loanAmount ?? 0;
+          l?.fields?.["Loan.LoanAmount"] ??
+          l?.fields?.["Loan.LoanAmount.Value"] ??
+          l?.fields?.["Fields.1109"] ??
+          l?.LoanAmount ?? l?.loanAmount ?? 0;
 
         const amt = Number(String(amtVal ?? "").replace(/,/g, ""));
         if (isFinite(amt)) total += amt;
 
+        // UPDATED: Current milestone from Fields.Log.MS.CurrentMilestone
         const msVal =
-        l?.fields?.["Loan.MilestoneName"] ??
-        l?.fields?.["Fields.Log.MS.CurrentMilestone"] ??
-        l?.MilestoneName ?? l?.milestoneName ?? "Unknown";
+          l?.fields?.["Fields.Log.MS.CurrentMilestone"] ??
+          l?.fields?.["Loan.MilestoneName"] ??
+          l?.MilestoneName ?? l?.milestoneName ?? "Unknown";
 
         const ms = String(msVal ?? "").trim() || "Unknown";
         byMilestone[ms] = (byMilestone[ms] || 0) + 1;
-    }
 
-    document.getElementById("pipeCount").textContent = String(loans.length);
-    document.getElementById("pipeTotal").textContent = formatMoney(total);
-    document.getElementById("pipeByStatus").textContent =
+        // NEW: Loan purpose from Field 19
+        const purposeVal =
+          l?.fields?.["Fields.19"] ??
+          l?.fields?.["Loan.LoanPurpose"] ??
+          l?.LoanPurpose ?? l?.loanPurpose ?? "Unknown";
+
+        const purpose = String(purposeVal ?? "").trim() || "Unknown";
+        byPurpose[purpose] = (byPurpose[purpose] || 0) + 1;
+      }
+
+      document.getElementById("pipeCount").textContent = String(loans.length);
+      document.getElementById("pipeTotal").textContent = formatMoney(total);
+
+      document.getElementById("pipeByStatus").textContent =
         Object.entries(byMilestone)
-        .sort((a,b) => b[1] - a[1])
-        .map(([k,v]) => `${k}: ${v}`)
-        .join(" | ") || "—";
+          .sort((a,b) => b[1] - a[1])
+          .map(([k,v]) => `${k}: ${v}`)
+          .join(" | ") || "—";
 
-    log("Pipeline KPIs refreshed ✅");
+      document.getElementById("pipeByPurpose").textContent =
+        Object.entries(byPurpose)
+          .sort((a,b) => b[1] - a[1])
+          .map(([k,v]) => `${k}: ${v}`)
+          .join(" | ") || "—";
+
+      log("Pipeline KPIs refreshed ✅");
     }
 
     document.getElementById("btnPipeline").addEventListener("click", () => {
@@ -407,6 +388,7 @@
         document.getElementById("pipeCount").textContent = "—";
         document.getElementById("pipeTotal").textContent = "—";
         document.getElementById("pipeByStatus").textContent = e.message;
+        document.getElementById("pipeByPurpose").textContent = e.message;
       });
     });
 
