@@ -279,6 +279,7 @@
     let selectedFolderName = null;
     let selectedLO = "";
     let selectedState = "";
+    let loDropdownInitialized = false;
 
     function extractFolderList(json) {
       if (Array.isArray(json)) return json;
@@ -328,6 +329,7 @@
       if (pipeline) {
         folderSelect.value = pipeline;
         onFolderChanged();
+        
       }
     }
 
@@ -348,35 +350,37 @@
     }
 
     function onFolderChanged() {
-      selectedFolderName = folderSelect.value || null;
-      resolvedFolderNameEl.textContent = selectedFolderName || "—";
-      btnPipeline.disabled = !selectedFolderName;
+    selectedFolderName = folderSelect.value || null;
+    resolvedFolderNameEl.textContent = selectedFolderName || "—";
+    btnPipeline.disabled = !selectedFolderName;
 
-      // Reset filters when folder changes
-      selectedLO = "";
-      selectedState = "";
-      if (loSelect) {
+    // Reset filters
+    selectedLO = "";
+    selectedState = "";
+    loDropdownInitialized = false;
+
+    if (loSelect) {
         loSelect.innerHTML = `<option value="">All LOs</option>`;
         loSelect.disabled = true;
-      }
-      if (stateSelect) stateSelect.value = "";
+    }
+    if (stateSelect) stateSelect.value = "";
 
-      // Clear headline KPIs
-      document.getElementById("kpiLoans").textContent = "—";
-      document.getElementById("kpiTotalVol").textContent = "—";
-      document.getElementById("kpiAvg").textContent = "—";
-      document.getElementById("kpiLoCount").textContent = "—";
+    // Clear headline KPIs
+    document.getElementById("kpiLoans").textContent = "—";
+    document.getElementById("kpiTotalVol").textContent = "—";
+    document.getElementById("kpiAvg").textContent = "—";
+    document.getElementById("kpiLoCount").textContent = "—";
 
-      // Clear lists
-      document.getElementById("milestoneDurationList").textContent = "—";
-      document.getElementById("loList").textContent = "—";
+    // Clear lists
+    document.getElementById("milestoneDurationList").textContent = "—";
+    document.getElementById("loList").textContent = "—";
 
-      // Clear charts
-      clearCanvas("milestoneChart");
-      clearCanvas("loChart");
-      clearCanvas("purposeChart");
+    // Clear charts
+    clearCanvas("milestoneChart");
+    clearCanvas("loChart");
+    clearCanvas("purposeChart");
 
-      log("Folder selected:", selectedFolderName || "(none)");
+    log("Folder selected:", selectedFolderName || "(none)");
     }
 
     folderSelect.addEventListener("change", onFolderChanged);
@@ -452,17 +456,21 @@
     }
 
     function rebuildLODropdownFromLoans(loEntries) {
-      const names = loEntries
+    const current = selectedLO || "";
+
+    const names = loEntries
         .map(([n]) => String(n ?? "").trim())
         .filter(n => n.length > 0);
 
-      const unique = Array.from(new Set(names));
+    const unique = Array.from(new Set(names));
 
-      loSelect.innerHTML =
+    loSelect.innerHTML =
         `<option value="">All LOs</option>` +
-        unique.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+        unique.map(n =>
+        `<option value="${escapeHtml(n)}"${n === current ? " selected" : ""}>${escapeHtml(n)}</option>`
+        ).join("");
 
-      loSelect.disabled = false;
+    loSelect.disabled = false;
     }
 
     // ---------- Simple bar chart renderer ----------
@@ -671,9 +679,10 @@
       const purposeEntries = sortedEntries(byPurpose);
       const loEntries = sortedEntries(byLO);
 
-      // Rebuild LO dropdown ONLY when not locked to a specific LO (or if dropdown is empty)
-      // This keeps the dropdown valid for the current dataset.
-      rebuildLODropdownFromLoans(loEntries);
+      if (!loDropdownInitialized) {
+        rebuildLODropdownFromLoans(loEntries);
+        loDropdownInitialized = true;
+        }
 
       // PASS 2: pull ONLY the duration fields needed (based on milestones found)
       const durationFields = Array.from(milestonesFound)
