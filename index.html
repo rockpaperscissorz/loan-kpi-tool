@@ -388,6 +388,87 @@ table.loans tbody tr:hover{ background:rgba(17,17,17,.025); }
 }
 .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
+/* Card header with right-side actions */
+.card-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
+.card-head .row{ align-items:flex-end; }
+
+/* Monthly trend chart */
+.legend{ display:flex; gap:14px; font-size:12px; color:var(--muted); align-items:center; }
+.legend span{ display:flex; align-items:center; gap:6px; }
+.sw{ display:inline-block; width:10px; height:10px; border-radius:3px; }
+.sw-apps, .tbar.apps{ background:rgba(17,17,17,.78); }
+.sw-funded, .tbar.funded{ background:#2f6db3; }
+.trend-chart{
+  display:grid;
+  grid-template-columns: repeat(var(--months, 12), minmax(36px, 1fr));
+  gap:8px;
+  margin-top:10px;
+  overflow-x:auto;
+}
+.tcol{ display:flex; flex-direction:column; align-items:stretch; gap:4px; min-width:36px; }
+.tbars{ height:150px; display:flex; align-items:flex-end; justify-content:center; gap:3px; border-bottom:1px solid rgba(17,17,17,.15); }
+.tbar{
+  width:42%; max-width:22px; min-height:2px;
+  border:none; padding:0; margin:0;
+  border-radius:5px 5px 0 0;
+  cursor:pointer;
+}
+.tbar:hover{ opacity:.8; }
+.tbar:focus-visible{ outline:2px solid rgba(17,17,17,.5); outline-offset:1px; }
+.tlabel{ text-align:center; font-size:12px; font-weight:700; }
+.tnums{ text-align:center; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+/* Data tables (leaderboard, upcoming closings, setup) */
+.table-wrap{ overflow-x:auto; border:1px solid rgba(17,17,17,.06); border-radius:12px; margin-top:6px; }
+table.data{ border-collapse:collapse; width:100%; font-size:13px; }
+table.data th, table.data td{ padding:8px 10px; text-align:left; white-space:nowrap; border-bottom:1px solid rgba(17,17,17,.06); vertical-align:middle; }
+table.data th{ background:#f7f7f9; font-size:12px; font-weight:700; }
+table.data .num{ text-align:right; font-variant-numeric:tabular-nums; }
+table.data tbody tr:hover{ background:rgba(17,17,17,.025); }
+table.data tbody tr:last-child td{ border-bottom:none; }
+table.data tfoot td{ background:#f7f7f9; font-weight:800; border-top:2px solid rgba(17,17,17,.12); border-bottom:none; }
+table.data tr.muted-row td{ color:var(--muted); background:rgba(17,17,17,.02); }
+table.data .rank{ width:36px; color:var(--muted); font-weight:700; }
+
+.cell-link{
+  border:none; background:none; padding:2px 4px; margin:-2px -4px;
+  font:inherit; color:inherit; cursor:pointer; border-radius:6px;
+  text-decoration:underline; text-decoration-color:rgba(17,17,17,.25); text-underline-offset:3px;
+}
+.cell-link:hover{ background:rgba(17,17,17,.06); text-decoration-color:rgba(17,17,17,.6); }
+.cell-link:focus-visible{ outline:2px solid rgba(17,17,17,.45); }
+.cell-link.name{ font-weight:700; }
+
+.share{ display:flex; align-items:center; gap:8px; justify-content:flex-end; }
+.share-track{ width:70px; height:8px; background:rgba(17,17,17,.07); border-radius:999px; overflow:hidden; }
+.share-fill{ height:100%; background:rgba(17,17,17,.7); border-radius:999px; }
+
+.flag{ display:inline-block; min-width:26px; text-align:center; padding:2px 8px; border-radius:999px; font-weight:800; font-size:12px; }
+.flag.warn{ background:rgba(176,122,0,.14); color:var(--warn-ink); }
+.flag.bad{ background:rgba(176,0,32,.12); color:var(--bad-ink); }
+.flag.ok{ background:rgba(11,122,44,.10); color:var(--ok-ink); }
+.flag.zero{ color:rgba(17,17,17,.35); font-weight:600; }
+.mini-trend{ font-size:11px; font-weight:700; margin-left:4px; }
+.mini-trend.up{ color:var(--ok-ink); }
+.mini-trend.down{ color:var(--bad-ink); }
+
+.setup-section{ margin-top:12px; }
+.setup-section h4{ margin:0 0 4px; font-size:14px; }
+
+/* Print: just the numbers */
+@media print{
+  body{ background:#fff; margin:0; }
+  .no-print, #banners, #debugCard, #setupCard, .backdrop, .toast{ display:none !important; }
+  .card{ box-shadow:none; break-inside:avoid; }
+  .grid{ grid-template-columns:repeat(12, 1fr) !important; }
+  .span-3{ grid-column:span 3 !important; }
+  .span-6{ grid-column:span 6 !important; }
+  .span-12{ grid-column:span 12 !important; }
+  .table-wrap, .trend-chart{ overflow:visible; }
+  body.is-loading .kpi-tile, body.is-loading .data-card{ opacity:1; }
+  *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
+
 pre{
   background:rgba(17,17,17,.04);
   padding:10px;
@@ -409,16 +490,19 @@ pre{
       <div>
         <h1>Pipeline KPI Dashboard</h1>
         <div class="muted" id="scopeLine">Loading…</div>
+        <div class="muted" id="filterSummary"></div>
       </div>
       <div class="row">
         <span class="pill"><b>Loans</b>: <span id="loanStatus">Not loaded</span></span>
         <span class="pill"><b>Last refresh</b>: <span id="lastRefresh">—</span></span>
-        <button class="btn primary" id="btnRefresh" disabled>Refresh</button>
+        <button class="btn no-print" id="btnPrint" type="button">Print</button>
+        <button class="btn primary no-print" id="btnRefresh" disabled>Refresh</button>
       </div>
     </div>
 
     <div class="banners" id="banners" aria-live="polite"></div>
 
+    <div class="no-print">
     <div class="divider"></div>
 
     <div class="row">
@@ -499,6 +583,7 @@ pre{
       </div>
       <button class="btn" id="btnSaveView" type="button">Save view</button>
     </div>
+    </div><!-- /.no-print -->
   </div>
 
   <!-- KPI tiles -->
@@ -578,17 +663,23 @@ pre{
       <div class="kpi-sub"><span id="s_fallout">By current loan status</span></div>
     </div>
 
+    <!-- Monthly trend -->
+    <div class="card span-12 data-card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Monthly Trend</div>
+          <div class="card-sub">Applications and fundings by month, last <span id="lbl_trendMonths">12</span> months • follows the filters, not the Period • click a bar for the loans</div>
+        </div>
+        <div class="legend"><span><i class="sw sw-apps"></i>Applications</span><span><i class="sw sw-funded"></i>Funded / Closed</span></div>
+      </div>
+      <div class="trend-chart" id="trendChart"><div class="empty">—</div></div>
+    </div>
+
     <!-- Charts / lists -->
     <div class="card span-6 data-card">
       <div class="card-title">Loans by Milestone</div>
       <div class="card-sub">Current milestone, in milestone order • click a bar for the loans</div>
       <div class="hbars" id="milestoneBars"><div class="empty">—</div></div>
-    </div>
-
-    <div class="card span-6 data-card">
-      <div class="card-title">Loan Purpose Distribution</div>
-      <div class="card-sub">Loans without a purpose are excluded • click a bar for the loans</div>
-      <div class="hbars" id="purposeBars"><div class="empty">—</div></div>
     </div>
 
     <div class="card span-6 data-card">
@@ -599,15 +690,59 @@ pre{
     </div>
 
     <div class="card span-6 data-card">
+      <div class="card-title">Loan Purpose Distribution</div>
+      <div class="card-sub">Loans without a purpose are excluded • click a bar for the loans</div>
+      <div class="hbars" id="purposeBars"><div class="empty">—</div></div>
+    </div>
+
+    <div class="card span-6 data-card">
       <div class="card-title">Loan Program</div>
-      <div class="card-sub">Top programs by count • click for the loans</div>
+      <div class="card-sub">Top programs by count, with share of volume • click for the loans</div>
       <div class="list" id="loanProgramList"><div class="empty">—</div></div>
+    </div>
 
-      <div class="divider"></div>
+    <!-- Upcoming closings -->
+    <div class="card span-12 data-card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Upcoming Closings</div>
+          <div class="card-sub" id="upcomingSub">Next open loans by estimated closing date, with lock status</div>
+        </div>
+        <button class="btn sm no-print" type="button" data-drill="upcomingClosings">View all</button>
+      </div>
+      <div class="table-wrap" id="upcomingClosings"><div class="empty">—</div></div>
+    </div>
 
-      <div class="card-title">Top Loan Officers</div>
-      <div class="card-sub" id="topLoSub">Top 10 by count • click for the loans</div>
-      <div class="list" id="topLoList"><div class="empty">—</div></div>
+    <!-- Loan officer leaderboard -->
+    <div class="card span-12 data-card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Loan Officer Leaderboard</div>
+          <div class="card-sub" id="lbSub">—</div>
+        </div>
+        <div class="row no-print">
+          <div class="field small">
+            <label for="lbSort">Rank by</label>
+            <select id="lbSort">
+              <option value="vol">Volume</option>
+              <option value="units">Units</option>
+              <option value="apps">Applications (period)</option>
+              <option value="funded">Funded (period)</option>
+              <option value="pullThrough">Pull-through</option>
+            </select>
+          </div>
+          <button class="btn" id="btnLbAll" type="button">Show all</button>
+        </div>
+      </div>
+      <div class="table-wrap" id="lbTable"><div class="empty">—</div></div>
+      <div class="muted" id="lbFoot" style="margin-top:8px;"></div>
+    </div>
+
+    <!-- Setup check (only with ?setup=1) -->
+    <div class="card span-12" id="setupCard" hidden>
+      <div class="card-title">Setup Check</div>
+      <div class="card-sub">For admins onboarding a client: confirms the CONFIG block matches this Encompass instance. Only shown with <code>?setup=1</code>.</div>
+      <div id="setupBody"><div class="empty">Waiting for loans to load…</div></div>
     </div>
 
     <!-- Debug (only shown with ?debug=1 or CONFIG.debug) -->
@@ -658,6 +793,12 @@ const CONFIG = {
   closingWindowDays: 7,               // "Closings scheduled" window
   allowCsvExport: true,               // set false to hide Export CSV in the drill-through
   modalRowLimit: 500,                 // rows rendered in the drill-through (CSV gets all)
+  trendMonths: 12,                    // months in the Monthly Trend chart
+  upcomingClosingsRows: 10,           // rows in the Upcoming Closings card
+  leaderboardTopN: 10,                // LOs shown before "Show all"
+  leaderboardDefaultSort: "vol",      // vol | units | apps | funded | pullThrough
+  minAppsForPullThrough: 3,           // LOs with fewer apps in the period show "—" for pull-through
+  rememberLastView: true,             // restore each user's last filters on open (this browser only)
   debug: false,                       // or add ?debug=1 to the URL
 
   // Current Loan Status (1393) values counted as fallout (case-insensitive "contains" match)
@@ -709,7 +850,10 @@ const CONFIG = {
 
 const API_SERVER = "https://api.elliemae.com";
 const VIEWS_KEY = "kpi:views";
-const IS_DEBUG = CONFIG.debug || (() => { try { return new URLSearchParams(location.search).has("debug"); } catch { return false; } })();
+const LAST_VIEW_KEY = "kpi:lastView";
+const urlHas = (p) => { try { return new URLSearchParams(location.search).has(p); } catch { return false; } };
+const IS_DEBUG = CONFIG.debug || urlHas("debug");
+const IS_SETUP = urlHas("setup");
 
 // =====================================================================
 // Small helpers
@@ -1130,7 +1274,10 @@ const state = {
   capped: false,
   canonical: new Set(),   // canonical field names available in this instance
   drill: {},
-  pendingView: null
+  pendingView: null,
+  lastK: null,            // last computed KPIs (for re-rendering the leaderboard)
+  lbShowAll: false,
+  fieldReport: []         // per-field availability + fill rate (setup check)
 };
 
 let fetchSeq = 0;
@@ -1173,6 +1320,18 @@ $("includeUnassigned").checked = !!CONFIG.includeUnassignedByDefault;
 $("lbl_lockDays").textContent = CONFIG.lockWarnDays;
 $("lbl_closeDays").textContent = CONFIG.closingWindowDays;
 if (!CONFIG.allowCsvExport) $("btnExportCsv").hidden = true;
+$("lbl_trendMonths").textContent = CONFIG.trendMonths;
+$("lbSort").value = CONFIG.leaderboardDefaultSort;
+if (IS_SETUP) $("setupCard").hidden = false;
+
+$("lbSort").addEventListener("change", recompute);
+$("btnLbAll").addEventListener("click", () => {
+  state.lbShowAll = !state.lbShowAll;
+  if (state.lastK) renderLeaderboard(state.lastK);
+});
+$("btnPrint").addEventListener("click", () => {
+  try { window.print(); } catch { toast("Printing isn't available here"); }
+});
 
 $("period").addEventListener("change", recompute);
 $("ageDays").addEventListener("input", recomputeSoon);
@@ -1365,6 +1524,19 @@ async function loadLoans(){
       onProgress: (n) => { if (seq === fetchSeq) $("loanStatus").textContent = `Loading… ${fmtInt(n)}`; }
     });
     if (!result || seq !== fetchSeq) return;
+
+    // Fill rate per field (setup check)
+    state.fieldReport = all.map(f => {
+      const isAvailable = !state.canonical.size || state.canonical.has(f.id);
+      let filled = 0;
+      if (isAvailable){
+        for (const raw of result.loans){
+          const v = getField(raw, f.id);
+          if (v !== null && v !== undefined && String(v).trim() !== "") filled++;
+        }
+      }
+      return { ...f, available: isAvailable, verified: state.canonical.size > 0, filled, total: result.loans.length };
+    });
 
     state.loans = result.loans.map(normalizeLoan);
     state.loadedFolders = folders;
@@ -1575,7 +1747,86 @@ function computeKpis(loans, { period, ageDays, stuckDays }){
     return row;
   });
 
+  // Loan officer leaderboard
+  const appsSet = new Set(apps), fundedSet = new Set(funded), fundedPriorSet = new Set(fundedPrior);
+  const agedSet = new Set(aged), stuckSet = new Set(stuck);
+  const lockSet = new Set([...locksExpiring, ...locksExpired]), expiredSet = new Set(locksExpired);
+
+  const loStats = (key, list, isNoLo = false) => {
+    const lApps = list.filter(l => appsSet.has(l));
+    const lClosed = lApps.filter(l => l.closeDate);
+    const lFunded = list.filter(l => fundedSet.has(l));
+    const lAged = list.filter(l => agedSet.has(l));
+    const lStuck = list.filter(l => stuckSet.has(l));
+    const lLocks = list.filter(l => lockSet.has(l)).sort((a,b) => a.lockExpDate - b.lockExpDate);
+    const closeDays = list
+      .map(l => (l.appDate && l.closeDate) ? dayDiff(l.appDate, l.closeDate) : NaN)
+      .filter(d => Number.isFinite(d) && d >= 0);
+    const vol = sum(list, l => l.amt);
+
+    if (!isNoLo && key){
+      addDrill(`loApps:${key}`, `${key} — applications, ${period.label}`, lApps);
+      addDrill(`loFunded:${key}`, `${key} — funded / closed, ${period.label}`, lFunded);
+      addDrill(`loAged:${key}`, `${key} — open loans more than ${ageDays} days since application`, lAged);
+      addDrill(`loStuck:${key}`, `${key} — open loans in milestone more than ${stuckDays} days`, lStuck.sort((a,b) => b.daysInMilestone - a.daysInMilestone));
+      addDrill(`loLocks:${key}`, `${key} — expired or expiring locks`, lLocks);
+    }
+
+    return {
+      key, isNoLo,
+      units: list.length,
+      vol,
+      share: totalVol ? vol / totalVol : NaN,
+      apps: lApps.length,
+      appsClosed: lClosed.length,
+      funded: lFunded.length,
+      fundedPrior: list.filter(l => fundedPriorSet.has(l)).length,
+      pullThrough: lApps.length >= CONFIG.minAppsForPullThrough ? lClosed.length / lApps.length : NaN,
+      medianClose: median(closeDays),
+      closeN: closeDays.length,
+      aged: lAged.length,
+      stuck: lStuck.length,
+      locks: lLocks.length,
+      locksExpired: lLocks.filter(l => expiredSet.has(l)).length
+    };
+  };
+
+  const leaderboard = [...byLo.entries()]
+    .filter(([k]) => k !== "(No LO assigned)")
+    .map(([k, list]) => loStats(k, list));
+  const noLoList = byLo.get("(No LO assigned)") || [];
+  const noLoRow = noLoList.length ? loStats("(No LO assigned)", noLoList, true) : null;
+  const teamRow = loStats("Team total", loans, true);
+
+  // Monthly trend (calendar months, ending with the current month)
+  const monthly = [];
+  for (let i = CONFIG.trendMonths - 1; i >= 0; i--){
+    const ms = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const me = new Date(ms.getFullYear(), ms.getMonth() + 1, 1);
+    const key = `${ms.getFullYear()}-${String(ms.getMonth() + 1).padStart(2, "0")}`;
+    const name = ms.toLocaleString(undefined, { month: "long", year: "numeric" });
+    const mApps = loans.filter(l => inWindow(l.appDate, ms, me));
+    const mFunded = loans.filter(l => inWindow(l.closeDate, ms, me));
+    addDrill(`mApps:${key}`, `Applications — ${name}`, mApps);
+    addDrill(`mFunded:${key}`, `Funded / closed — ${name}`, mFunded);
+    monthly.push({
+      key, name,
+      label: ms.toLocaleString(undefined, { month: "short" }),
+      year: ms.getFullYear(),
+      showYear: ms.getMonth() === 0 || i === CONFIG.trendMonths - 1,
+      apps: mApps.length,
+      funded: mFunded.length
+    });
+  }
+
+  // Upcoming closings (open loans, estimated closing today or later)
+  const upcoming = open
+    .filter(l => l.estCloseDate && dayDiff(today, l.estCloseDate) >= 0)
+    .sort((a,b) => (a.estCloseDate - b.estCloseDate) || ((b.amt || 0) - (a.amt || 0)));
+  addDrill("upcomingClosings", "Upcoming closings — open loans by estimated closing date", upcoming);
+
   return {
+    leaderboard, noLoRow, teamRow, monthly, upcoming, today,
     totalUnits, totalVol, avgAmt, uniqueLOs,
     apps: apps.length, appsPrior: appsPrior.length,
     funded: funded.length, fundedPrior: fundedPrior.length,
@@ -1666,16 +1917,22 @@ function hbarsHtml(entries, { total, drillPrefix, valueHtml }){
     </div>`).join("");
 }
 
-function listHtml(entries, { drillPrefix, topN }){
+function listHtml(entries, { drillPrefix, topN, totalVol }){
   if (!entries.length) return `<div class="empty">No data</div>`;
-  return entries.slice(0, topN).map(e => `
+  return entries.slice(0, topN).map(e => {
+    const share = totalVol ? e.vol / totalVol : NaN;
+    return `
     <div class="list-item" role="button" tabindex="0" data-drill="${escapeHtml(drillPrefix + e.key)}">
       <div>
         <b>${escapeHtml(e.key)}</b>
-        <div class="badge">${fmtInt(e.count)} loans • ${escapeHtml(moneyShort(e.vol))}</div>
+        <div class="badge">${fmtInt(e.count)} loans • ${escapeHtml(moneyShort(e.vol))}${Number.isFinite(share) ? ` • ${pct(share)} of volume` : ""}</div>
       </div>
-      <div class="right"><b>${fmtInt(e.count)}</b></div>
-    </div>`).join("");
+      <div class="right">
+        <b>${fmtInt(e.count)}</b>
+        ${Number.isFinite(share) ? `<div class="share-track" style="margin-top:6px;"><div class="share-fill" style="width:${(share * 100).toFixed(1)}%"></div></div>` : ""}
+      </div>
+    </div>`;
+  }).join("");
 }
 
 function turnTimesHtml(rows){
@@ -1728,10 +1985,281 @@ function renderBreakdowns(k){
   $("turnTimes").innerHTML = turnTimesHtml(k.turnTimes);
   $("ttLegend").innerHTML = `Health compares the <b>average</b> with each stage's target (set in CONFIG). Business days exclude weekends but not holidays.`;
 
-  $("loanProgramList").innerHTML = listHtml(k.programEntries, { drillPrefix: "program:", topN: 12 });
+  $("loanProgramList").innerHTML = listHtml(k.programEntries, { drillPrefix: "program:", topN: 12, totalVol: k.totalVol });
 
-  $("topLoList").innerHTML = listHtml(k.loEntries, { drillPrefix: "lo:", topN: 10 });
-  setText("topLoSub", `Top ${Math.min(10, k.loEntries.length)} of ${fmtInt(k.loEntries.length)} by count • click for the loans`);
+  renderTrend(k);
+  renderUpcoming(k);
+  renderLeaderboard(k);
+}
+
+function renderTrend(k){
+  const el = $("trendChart");
+  const months = k.monthly;
+  el.style.setProperty("--months", months.length);
+  const max = Math.max(1, ...months.map(m => Math.max(m.apps, m.funded)));
+  if (!months.some(m => m.apps || m.funded)){
+    el.innerHTML = `<div class="empty">No application or closing dates in the last ${months.length} months.</div>`;
+    return;
+  }
+  const h = (n) => `${Math.max(n ? 2 : 0, (n / max) * 100).toFixed(1)}%`;
+  el.innerHTML = months.map(m => `
+    <div class="tcol">
+      <div class="tbars">
+        <button type="button" class="tbar apps" style="height:${h(m.apps)}" data-drill="${escapeHtml("mApps:" + m.key)}"
+          title="${escapeHtml(`${m.name}: ${m.apps} applications`)}" aria-label="${escapeHtml(`${m.name}: ${m.apps} applications`)}"></button>
+        <button type="button" class="tbar funded" style="height:${h(m.funded)}" data-drill="${escapeHtml("mFunded:" + m.key)}"
+          title="${escapeHtml(`${m.name}: ${m.funded} funded / closed`)}" aria-label="${escapeHtml(`${m.name}: ${m.funded} funded / closed`)}"></button>
+      </div>
+      <div class="tlabel">${escapeHtml(m.label)}${m.showYear ? ` <span class="muted">'${String(m.year).slice(2)}</span>` : ""}</div>
+      <div class="tnums">${fmtInt(m.apps)} / ${fmtInt(m.funded)}</div>
+    </div>`).join("");
+}
+
+function lockStatus(l, today){
+  if (!l.lockExpDate) return { cls: "warn", text: "No lock date" };
+  const left = dayDiff(today, l.lockExpDate);
+  if (left < 0) return { cls: "bad", text: "Lock expired" };
+  if (l.estCloseDate && l.lockExpDate < l.estCloseDate) return { cls: "warn", text: "Lock expires before closing" };
+  return { cls: "ok", text: `Locked (${left}d left)` };
+}
+
+function renderUpcoming(k){
+  const rows = k.upcoming.slice(0, CONFIG.upcomingClosingsRows);
+  setText("upcomingSub", k.upcoming.length
+    ? `Next ${rows.length} of ${fmtInt(k.upcoming.length)} open loans by estimated closing date, with lock status`
+    : "Open loans by estimated closing date, with lock status");
+  if (!rows.length){
+    $("upcomingClosings").innerHTML = `<div class="empty" style="padding:10px;">No open loans with an estimated closing date from today on.</div>`;
+    return;
+  }
+  $("upcomingClosings").innerHTML = `
+    <table class="data">
+      <thead><tr>
+        <th>Est. Close</th><th>Loan #</th><th>Loan Officer</th><th>Milestone</th>
+        <th class="num">Amount</th><th>Lock Exp.</th><th>Lock Status</th>
+      </tr></thead>
+      <tbody>${rows.map(l => {
+        const inDays = dayDiff(k.today, l.estCloseDate);
+        const ls = lockStatus(l, k.today);
+        return `<tr>
+          <td><b>${escapeHtml(fmtDate(l.estCloseDate))}</b> <span class="muted">${inDays === 0 ? "today" : `in ${inDays}d`}</span></td>
+          <td class="mono">${escapeHtml(l.loanNumber || "—")}</td>
+          <td>${escapeHtml(l.lo || "(No LO)")}</td>
+          <td>${escapeHtml(l.milestone)}</td>
+          <td class="num">${escapeHtml(money(l.amt))}</td>
+          <td>${escapeHtml(fmtDate(l.lockExpDate))}</td>
+          <td><span class="flag ${ls.cls}">${escapeHtml(ls.text)}</span></td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>`;
+}
+
+const LB_SORTS = {
+  vol:         { label: "volume",                 val: r => r.vol },
+  units:       { label: "units",                  val: r => r.units },
+  apps:        { label: "applications",           val: r => r.apps },
+  funded:      { label: "funded loans",           val: r => r.funded },
+  pullThrough: { label: "pull-through",           val: r => r.pullThrough }
+};
+
+function renderLeaderboard(k){
+  const sortKey = LB_SORTS[$("lbSort").value] ? $("lbSort").value : "vol";
+  const sorter = LB_SORTS[sortKey];
+  const ranked = [...k.leaderboard].sort((a, b) => {
+    const va = sorter.val(a), vb = sorter.val(b);
+    const fa = Number.isFinite(va), fb = Number.isFinite(vb);
+    if (fa !== fb) return fa ? -1 : 1;                 // "—" values last
+    return ((fb ? vb : 0) - (fa ? va : 0)) || (b.vol - a.vol) || a.key.localeCompare(b.key);
+  });
+  const shown = state.lbShowAll ? ranked : ranked.slice(0, CONFIG.leaderboardTopN);
+  const period = PERIODS[$("period").value] || PERIODS.MTD;
+
+  $("btnLbAll").hidden = ranked.length <= CONFIG.leaderboardTopN;
+  $("btnLbAll").textContent = state.lbShowAll ? `Show top ${CONFIG.leaderboardTopN}` : `Show all ${ranked.length}`;
+  setText("lbSub", ranked.length
+    ? `${state.lbShowAll ? "All" : `Top ${shown.length} of`} ${fmtInt(ranked.length)} loan officers, ranked by ${sorter.label} • click a number for the loans`
+    : "No loan officers in view");
+
+  if (!ranked.length && !k.noLoRow){
+    $("lbTable").innerHTML = `<div class="empty" style="padding:10px;">No loans in view.</div>`;
+    setText("lbFoot", "");
+    return;
+  }
+
+  const link = (drill, text, cls = "") =>
+    `<button type="button" class="cell-link ${cls}" data-drill="${escapeHtml(drill)}">${text}</button>`;
+
+  const flag = (n, drill, cls) => n
+    ? link(drill, `<span class="flag ${cls}">${fmtInt(n)}</span>`)
+    : `<span class="flag zero">0</span>`;
+
+  const miniTrend = (cur, prior) => {
+    if (!prior || !Number.isFinite(prior)) return "";
+    const up = cur >= prior;
+    return `<span class="mini-trend ${up ? "up" : "down"}" title="${escapeHtml(`${prior} ${period.prior}`)}">${up ? "▲" : "▼"}</span>`;
+  };
+
+  const shareCell = (share) => Number.isFinite(share)
+    ? `<div class="share"><span>${pct(share, 1)}</span><div class="share-track"><div class="share-fill" style="width:${(share * 100).toFixed(1)}%"></div></div></div>`
+    : "—";
+
+  // drill keys for the team-total row map to the existing tile drill-throughs
+  const teamDrill = { units: "pipelineUnits", apps: "appsPeriod", funded: "fundedPeriod", aged: "agedLoans", stuck: "stuckLoans", locks: "locks" };
+
+  const row = (r, rank) => {
+    const isTeam = r.key === "Team total";
+    const d = (kind) => isTeam ? teamDrill[kind]
+      : (r.isNoLo ? { units: "lo:(No LO assigned)" }[kind] : ({
+          units: `lo:${r.key}`, apps: `loApps:${r.key}`, funded: `loFunded:${r.key}`,
+          aged: `loAged:${r.key}`, stuck: `loStuck:${r.key}`, locks: `loLocks:${r.key}`
+        })[kind]);
+    const cellNum = (kind, n) => (d(kind) && n) ? link(d(kind), fmtInt(n)) : fmtInt(n);
+    const flagCell = (kind, n, cls) => d(kind) ? flag(n, d(kind), cls) : fmtInt(n);
+    const ptTitle = r.apps ? `${r.appsClosed} of ${r.apps} applications closed` : "No applications in period";
+
+    return `
+      <td class="rank">${rank}</td>
+      <td>${d("units") ? link(d("units"), escapeHtml(r.key), "name") : `<b>${escapeHtml(r.key)}</b>`}</td>
+      <td class="num">${cellNum("units", r.units)}</td>
+      <td class="num">${escapeHtml(moneyShort(r.vol))}</td>
+      <td class="num">${isTeam ? "100%" : shareCell(r.share)}</td>
+      <td class="num">${cellNum("apps", r.apps)}</td>
+      <td class="num">${cellNum("funded", r.funded)}${miniTrend(r.funded, r.fundedPrior)}</td>
+      <td class="num" title="${escapeHtml(ptTitle)}">${pct(r.pullThrough)}</td>
+      <td class="num" title="${escapeHtml(`${r.closeN} loans with application and closing dates`)}">${Number.isFinite(r.medianClose) ? `${Math.round(r.medianClose)}d` : "—"}</td>
+      <td class="num">${flagCell("aged", r.aged, "warn")}</td>
+      <td class="num">${flagCell("stuck", r.stuck, "warn")}</td>
+      <td class="num">${flagCell("locks", r.locks, r.locksExpired ? "bad" : "warn")}</td>`;
+  };
+
+  $("lbTable").innerHTML = `
+    <table class="data">
+      <thead><tr>
+        <th class="rank">#</th>
+        <th>Loan Officer</th>
+        <th class="num">Units</th>
+        <th class="num">Volume</th>
+        <th class="num">Share of Volume</th>
+        <th class="num">Apps (${escapeHtml(period.short)})</th>
+        <th class="num">Funded (${escapeHtml(period.short)})</th>
+        <th class="num" title="Share of the period's applications that have closed">Pull-Through</th>
+        <th class="num" title="Median days from application to closing, all closed loans in view">Median App → Close</th>
+        <th class="num" title="Open loans aged past the aging threshold">Aged</th>
+        <th class="num" title="Open loans past the stuck-in-milestone threshold">Stuck</th>
+        <th class="num" title="Open loans with expired or soon-expiring locks (red = at least one expired)">Locks</th>
+      </tr></thead>
+      <tbody>
+        ${shown.map((r, i) => `<tr>${row(r, i + 1)}</tr>`).join("")}
+        ${k.noLoRow ? `<tr class="muted-row">${row(k.noLoRow, "—")}</tr>` : ""}
+      </tbody>
+      <tfoot><tr>${row(k.teamRow, "")}</tr></tfoot>
+    </table>`;
+
+  const notes = [
+    `Pull-through shows "—" for LOs with fewer than ${CONFIG.minAppsForPullThrough} applications in the period.`,
+    `▲/▼ on Funded compares with ${period.prior}.`
+  ];
+  if (!state.loadedFolders.some(f => /clos|fund|complet|archiv/i.test(f))){
+    notes.push("Funded and pull-through only count loans in the selected folders.");
+  }
+  setText("lbFoot", notes.join(" "));
+}
+
+function renderFilterSummary(period){
+  const parts = [`Period: ${period.label}`];
+  const labels = { lo: "LO", state: "State", amort: "Amort.", purpose: "Purpose", loanType: "Loan type", milestone: "Milestone" };
+  for (const def of filterDefs){
+    const sel = filters[def.key].getSelected();
+    if (!sel.length) continue;
+    parts.push(`${labels[def.key]}: ${sel.length > 3 ? `${sel.slice(0, 3).join(", ")} +${sel.length - 3} more` : sel.join(", ")}`);
+  }
+  if ($("includeUnassigned").checked) parts.push("Including loans with no LO");
+  setText("filterSummary", parts.join(" • "));
+}
+
+function renderSetupCheck(){
+  if (!IS_SETUP || !state.loaded) return;
+  const total = state.loans.length;
+
+  const fieldRows = state.fieldReport.map(f => {
+    const status = !f.available ? `<span class="flag bad">Missing</span>`
+      : (!f.verified ? `<span class="flag warn">Not verified</span>` : `<span class="flag ok">Found</span>`);
+    const fill = f.available && f.total ? f.filled / f.total : NaN;
+    const fillFlag = !f.available ? "—"
+      : `<span class="flag ${fill === 0 ? "bad" : (fill < 0.2 ? "warn" : "ok")}">${pct(fill)}</span>`;
+    return `<tr><td>${escapeHtml(f.label)}</td><td class="mono">${escapeHtml(f.id)}</td><td>${status}</td><td class="num">${fillFlag}</td></tr>`;
+  }).join("");
+
+  const msCounts = countBy(state.loans, l => l.milestone);
+  const msInData = [...msCounts.entries()].sort((a, b) => b[1].length - a[1].length);
+  const notConfigured = msInData.filter(([n]) => n !== "Unknown" && !CONFIG.milestones.includes(n));
+  const noLoans = CONFIG.milestones.filter(n => !msCounts.has(n));
+
+  const statusCounts = countBy(state.loans, l => l.loanStatus || "(blank)");
+  const statusRows = [...statusCounts.entries()].sort((a, b) => b[1].length - a[1].length).map(([s, list]) => {
+    const isF = list[0].isFallout;
+    return `<tr><td>${escapeHtml(s)}</td><td class="num">${fmtInt(list.length)}</td><td>${isF ? `<span class="flag warn">Fallout</span>` : `<span class="flag zero">—</span>`}</td></tr>`;
+  }).join("");
+
+  $("setupBody").innerHTML = `
+    <div class="setup-section">
+      <h4>Fields</h4>
+      <div class="muted">Fill rate = share of the ${fmtInt(total)} loaded loans with a value. 0% usually means a wrong field ID or milestone name.</div>
+      <div class="table-wrap"><table class="data">
+        <thead><tr><th>Field</th><th>Canonical name</th><th>In pipeline API</th><th class="num">Fill rate</th></tr></thead>
+        <tbody>${fieldRows}</tbody>
+      </table></div>
+    </div>
+
+    <div class="setup-section">
+      <h4>Milestones</h4>
+      <div class="muted">CONFIG.milestones: ${escapeHtml(CONFIG.milestones.join(" → "))}</div>
+      ${notConfigured.length
+        ? `<div class="banner warn" style="margin-top:6px;">Loans are in milestones that aren't in CONFIG.milestones (no turn times or days-in-milestone for these): <b>${notConfigured.map(([n, l]) => `${escapeHtml(n)} (${fmtInt(l.length)})`).join(", ")}</b></div>`
+        : `<div class="banner info" style="margin-top:6px;">Every milestone in the loaded loans is listed in CONFIG.milestones.</div>`}
+      ${noLoans.length ? `<div class="muted" style="margin-top:6px;">In CONFIG but no loaded loans are currently there (fine if expected): ${escapeHtml(noLoans.join(", "))}</div>` : ""}
+    </div>
+
+    <div class="setup-section">
+      <h4>Loan statuses (${escapeHtml(CONFIG.fields.loanStatus.id)})</h4>
+      <div class="muted">Statuses matching CONFIG.falloutStatuses (${escapeHtml(CONFIG.falloutStatuses.join(", "))}) count as fallout.</div>
+      <div class="table-wrap"><table class="data">
+        <thead><tr><th>Status</th><th class="num">Loans</th><th>Counted as</th></tr></thead>
+        <tbody>${statusRows}</tbody>
+      </table></div>
+    </div>
+
+    <div class="setup-section">
+      <h4>Folders loaded</h4>
+      <div class="muted">${escapeHtml(state.loadedFolders.join(", ") || "—")}${state.capped ? ` • capped at ${fmtInt(CONFIG.maxLoans)} loans` : ""}</div>
+    </div>`;
+}
+
+// Each user's last filters, restored next time (this browser only)
+function saveLastView(){
+  if (!CONFIG.rememberLastView) return;
+  try { localStorage.setItem(LAST_VIEW_KEY, JSON.stringify(captureView("__last"))); } catch {}
+}
+
+function restoreLastView(){
+  if (!CONFIG.rememberLastView) return;
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(LAST_VIEW_KEY) || "null"); } catch {}
+  if (!v || typeof v !== "object") return;
+
+  if (v.period && PERIODS[v.period]) $("period").value = v.period;
+  if (v.ageDays) $("ageDays").value = v.ageDays;
+  if (v.stuckDays) $("stuckDays").value = v.stuckDays;
+  if (typeof v.includeUnassigned === "boolean") $("includeUnassigned").checked = v.includeUnassigned;
+  if (v.lbSort && LB_SORTS[v.lbSort]) $("lbSort").value = v.lbSort;
+
+  if (Array.isArray(v.folders) && v.folders.length){
+    const before = msFolders.getSelected();
+    msFolders.setSelected(v.folders, { silent: true });
+    if (!msFolders.getSelected().length) msFolders.setSelected(before, { silent: true }); // folders no longer exist
+  }
+  state.pendingView = v; // filters applied once loans load
+  $("btnRefresh").disabled = msFolders.getSelected().length === 0;
 }
 
 function updateScopeLine(totalLoaded, inView, excludedNoLo){
@@ -1752,10 +2280,14 @@ function recompute(){
   const { loans, excludedNoLo } = applyFilters(state.loans);
   const k = computeKpis(loans, opts);
   state.drill = k.drill;
+  state.lastK = k;
 
   renderKpis(k, opts.period, opts);
   renderBreakdowns(k);
   updateScopeLine(state.loans.length, loans.length, excludedNoLo);
+  renderFilterSummary(opts.period);
+  renderSetupCheck();
+  saveLastView();
 
   // Pull-through and funded counts only see loans in the selected folders
   const closedFolderHint = !state.loadedFolders.some(f => /clos|fund|complet|archiv/i.test(f));
@@ -1944,7 +2476,7 @@ document.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" && e.key !== " ") return;
   const el = e.target.closest?.("[data-drill]");
-  if (!el || el !== e.target) return;
+  if (!el || el !== e.target || el.tagName === "BUTTON") return; // real buttons already fire click
   e.preventDefault();
   openModal(el.dataset.drill);
 });
@@ -1978,6 +2510,7 @@ function captureView(name){
     ageDays: $("ageDays").value,
     stuckDays: $("stuckDays").value,
     includeUnassigned: $("includeUnassigned").checked,
+    lbSort: $("lbSort").value,
     filters: f
   };
 }
@@ -1996,6 +2529,7 @@ function applyView(v){
   if (v.ageDays) $("ageDays").value = v.ageDays;
   if (v.stuckDays) $("stuckDays").value = v.stuckDays;
   if (typeof v.includeUnassigned === "boolean") $("includeUnassigned").checked = v.includeUnassigned;
+  if (v.lbSort && LB_SORTS[v.lbSort]) $("lbSort").value = v.lbSort;
 
   const wanted = (v.folders || []).slice().sort().join("|");
   const current = state.loadedFolders.slice().sort().join("|");
@@ -2054,6 +2588,7 @@ renderViewSelect();
   try{
     await loadCanonicalFields();
     await loadFolders();
+    restoreLastView();
     if (msFolders.getSelected().length) await loadLoans();
     else $("scopeLine").textContent = "Choose one or more loan folders to begin";
   }catch(e){
