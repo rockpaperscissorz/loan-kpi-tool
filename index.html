@@ -533,6 +533,11 @@ pre{
         <input id="stuckDays" class="input" type="number" min="1" max="365" />
       </div>
 
+      <div class="field small">
+        <label for="closeWindow">Closings window</label>
+        <select id="closeWindow"></select>
+      </div>
+
       <label class="check" title="Loans with no Loan Officer (field 317) are excluded unless this is checked">
         <input type="checkbox" id="includeUnassigned" />
         Include loans with no LO
@@ -646,9 +651,9 @@ pre{
     </div>
 
     <div class="card span-3 kpi-tile" data-drill="closings" role="button" tabindex="0">
-      <div class="kpi-label">Closings Scheduled (next <span id="lbl_closeDays">7</span> days)</div>
+      <div class="kpi-label">Closings Scheduled (<span id="lbl_closeWindow">next 7 days</span>)</div>
       <div class="kpi-value" id="k_closings">—</div>
-      <div class="kpi-sub"><span id="s_closings">By estimated closing date</span></div>
+      <div class="kpi-sub"><span id="s_closings">By closing date</span></div>
     </div>
 
     <div class="card span-3 kpi-tile" data-drill="stuckLoans" role="button" tabindex="0">
@@ -706,7 +711,7 @@ pre{
       <div class="card-head">
         <div>
           <div class="card-title">Upcoming Closings</div>
-          <div class="card-sub" id="upcomingSub">Next open loans by estimated closing date, with lock status</div>
+          <div class="card-sub" id="upcomingSub">Loans with a closing date in the selected window, with lock status</div>
         </div>
         <button class="btn sm no-print" type="button" data-drill="upcomingClosings">View all</button>
       </div>
@@ -790,7 +795,8 @@ const CONFIG = {
   defaultStuckDays: 14,
   includeUnassignedByDefault: false,  // loans with no LO (field 317)
   lockWarnDays: 7,                    // "Locks expiring" window
-  closingWindowDays: 7,               // "Closings scheduled" window
+  closingWindowDays: 7,               // default window for Closings Scheduled + Upcoming Closings (by closing date, 748)
+  closingWindowOptions: [0, 3, 7, 14, 21], // choices in the "Closings window" dropdown (0 = today only)
   allowCsvExport: true,               // set false to hide Export CSV in the drill-through
   modalRowLimit: 500,                 // rows rendered in the drill-through (CSV gets all)
   trendMonths: 12,                    // months in the Monthly Trend chart
@@ -824,8 +830,7 @@ const CONFIG = {
     discDate:         { id: "Fields.3142",                    label: "Disclosure Date" },
     uwDate:           { id: "Fields.2301",                    label: "UW Approval Date" },
     closeDate:        { id: "Fields.748",                     label: "Closing Date" },
-    lockExpDate:      { id: "Fields.762",                     label: "Lock Expiration Date" },
-    estCloseDate:     { id: "Fields.763",                     label: "Estimated Closing Date" }
+    lockExpDate:      { id: "Fields.762",                     label: "Lock Expiration Date" }
   },
 
   // Milestone names exactly as configured in this client's Encompass instance, in order.
@@ -1318,7 +1323,18 @@ $("ageDays").value = CONFIG.defaultAgingDays;
 $("stuckDays").value = CONFIG.defaultStuckDays;
 $("includeUnassigned").checked = !!CONFIG.includeUnassignedByDefault;
 $("lbl_lockDays").textContent = CONFIG.lockWarnDays;
-$("lbl_closeDays").textContent = CONFIG.closingWindowDays;
+const closeWindowLabel = (n) => n === 0 ? "today" : `next ${n} days`;
+$("closeWindow").innerHTML = Array.from(new Set([...CONFIG.closingWindowOptions, CONFIG.closingWindowDays]))
+  .sort((a, b) => a - b)
+  .map(n => `<option value="${n}">${n === 0 ? "Today only" : `Next ${n} days`}</option>`).join("");
+$("closeWindow").value = String(CONFIG.closingWindowDays);
+$("closeWindow").addEventListener("change", recompute);
+// Only accept saved values that are still offered in the dropdown
+function setCloseWindow(v){
+  if (v === undefined || v === null) return;
+  const opt = Array.from($("closeWindow").options).find(o => o.value === String(v));
+  if (opt) $("closeWindow").value = opt.value;
+}
 if (!CONFIG.allowCsvExport) $("btnExportCsv").hidden = true;
 $("lbl_trendMonths").textContent = CONFIG.trendMonths;
 $("lbSort").value = CONFIG.leaderboardDefaultSort;
@@ -1478,7 +1494,6 @@ function normalizeLoan(raw){
     uwDate: parseDate(g("uwDate")),
     closeDate: parseDate(g("closeDate")),
     lockExpDate: parseDate(g("lockExpDate")),
-    estCloseDate: parseDate(g("estCloseDate")),
     msDates,
     currentMsDate: msDates[milestone] || null,
     daysInMilestone: NaN
@@ -1638,8 +1653,10 @@ function countBy(loans, keyFn){
   return counts;
 }
 
-function computeKpis(loans, { period, ageDays, stuckDays }){
+function computeKpis(loans, { period, ageDays, stuckDays, closeWindow }){
   const today = startOfDay(new Date());
+  const tomorrow = addDays(today, 1);
+  const hasClosed = (l) => !!l.closeDate && l.closeDate < tomorrow;
   const drill = {};
   const addDrill = (key, title, list, note = "") => { drill[key] = { title, loans: list, note }; };
 
@@ -1664,7 +1681,7 @@ function computeKpis(loans, { period, ageDays, stuckDays }){
   const appsPrior = loans.filter(l => inWindow(l.appDate, period.priorStart, period.priorEnd));
   const funded = loans.filter(l => inWindow(l.closeDate, period.start, period.end));
   const fundedPrior = loans.filter(l => inWindow(l.closeDate, period.priorStart, period.priorEnd));
-  const appsClosed = apps.filter(l => l.closeDate);
+  const appsClosed = apps.filter(hasClosed);
   const pullThrough = apps.length ? appsClosed.length / apps.length : NaN;
 
   addDrill("appsPeriod", `Applications — ${period.label}`, apps);
@@ -1673,7 +1690,8 @@ function computeKpis(loans, { period, ageDays, stuckDays }){
     `${fmtInt(appsClosed.length)} of ${fmtInt(apps.length)} have a closing date`);
 
   // Open loans = not closed and not fallout
-  const open = loans.filter(l => !l.closeDate && !l.isFallout);
+  // Open = not fallout and not yet closed (a future closing date is scheduled, not closed)
+  const open = loans.filter(l => !hasClosed(l) && !l.isFallout);
 
   const aged = open.filter(l => l.appDate && dayDiff(l.appDate, today) > ageDays);
   addDrill("agedLoans", `Open loans more than ${ageDays} days since application`, aged);
@@ -1685,14 +1703,12 @@ function computeKpis(loans, { period, ageDays, stuckDays }){
     [...locksExpired, ...locksExpiring].sort((a,b) => a.lockExpDate - b.lockExpDate),
     `${fmtInt(locksExpiring.length)} expiring within ${CONFIG.lockWarnDays} days • ${fmtInt(locksExpired.length)} already expired`);
 
-  const W = CONFIG.closingWindowDays;
-  const closeIn = (l) => dayDiff(today, l.estCloseDate);
-  const closingsSoon = open.filter(l => l.estCloseDate && closeIn(l) >= 0 && closeIn(l) < W);
-  const closingsNext = open.filter(l => l.estCloseDate && closeIn(l) >= W && closeIn(l) < 2*W);
-  const closingsPast = open.filter(l => l.estCloseDate && closeIn(l) < 0);
-  addDrill("closings", `Open loans with an estimated closing in the next ${2*W} days`,
-    [...closingsSoon, ...closingsNext].sort((a,b) => a.estCloseDate - b.estCloseDate),
-    `${fmtInt(closingsSoon.length)} in the next ${W} days • ${fmtInt(closingsNext.length)} in days ${W+1}–${2*W}`);
+  // Closings scheduled: closing date (748) from today through today + window, excluding fallout
+  const closingsSoon = loans
+    .filter(l => !l.isFallout && l.closeDate && dayDiff(today, l.closeDate) >= 0 && dayDiff(today, l.closeDate) <= closeWindow)
+    .sort((a,b) => (a.closeDate - b.closeDate) || ((b.amt || 0) - (a.amt || 0)));
+  addDrill("closings", `Closings scheduled — ${closeWindowLabel(closeWindow)}`, closingsSoon,
+    `${money(sum(closingsSoon, l => l.amt))} in volume`);
 
   const withMsDate = open.filter(l => Number.isFinite(l.daysInMilestone));
   const stuck = withMsDate.filter(l => l.daysInMilestone > stuckDays).sort((a,b) => b.daysInMilestone - a.daysInMilestone);
@@ -1734,7 +1750,7 @@ function computeKpis(loans, { period, ageDays, stuckDays }){
     const pairs = [];
     for (const l of loans){
       const a = resolvePoint(l, def.from), b = resolvePoint(l, def.to);
-      if (!a || !b) continue;
+      if (!a || !b || b >= tomorrow) continue; // future-dated events haven't happened yet
       const d = def.businessDays ? businessDayDiff(a, b) : dayDiff(a, b);
       if (Number.isFinite(d) && d >= 0) pairs.push({ l, d });
     }
@@ -1754,13 +1770,13 @@ function computeKpis(loans, { period, ageDays, stuckDays }){
 
   const loStats = (key, list, isNoLo = false) => {
     const lApps = list.filter(l => appsSet.has(l));
-    const lClosed = lApps.filter(l => l.closeDate);
+    const lClosed = lApps.filter(hasClosed);
     const lFunded = list.filter(l => fundedSet.has(l));
     const lAged = list.filter(l => agedSet.has(l));
     const lStuck = list.filter(l => stuckSet.has(l));
     const lLocks = list.filter(l => lockSet.has(l)).sort((a,b) => a.lockExpDate - b.lockExpDate);
     const closeDays = list
-      .map(l => (l.appDate && l.closeDate) ? dayDiff(l.appDate, l.closeDate) : NaN)
+      .map(l => (l.appDate && hasClosed(l)) ? dayDiff(l.appDate, l.closeDate) : NaN)
       .filter(d => Number.isFinite(d) && d >= 0);
     const vol = sum(list, l => l.amt);
 
@@ -1806,7 +1822,7 @@ function computeKpis(loans, { period, ageDays, stuckDays }){
     const key = `${ms.getFullYear()}-${String(ms.getMonth() + 1).padStart(2, "0")}`;
     const name = ms.toLocaleString(undefined, { month: "long", year: "numeric" });
     const mApps = loans.filter(l => inWindow(l.appDate, ms, me));
-    const mFunded = loans.filter(l => inWindow(l.closeDate, ms, me));
+    const mFunded = loans.filter(l => hasClosed(l) && inWindow(l.closeDate, ms, me));
     addDrill(`mApps:${key}`, `Applications — ${name}`, mApps);
     addDrill(`mFunded:${key}`, `Funded / closed — ${name}`, mFunded);
     monthly.push({
@@ -1819,11 +1835,10 @@ function computeKpis(loans, { period, ageDays, stuckDays }){
     });
   }
 
-  // Upcoming closings (open loans, estimated closing today or later)
-  const upcoming = open
-    .filter(l => l.estCloseDate && dayDiff(today, l.estCloseDate) >= 0)
-    .sort((a,b) => (a.estCloseDate - b.estCloseDate) || ((b.amt || 0) - (a.amt || 0)));
-  addDrill("upcomingClosings", "Upcoming closings — open loans by estimated closing date", upcoming);
+  // Upcoming Closings card uses the same window and loans as the tile
+  const upcoming = closingsSoon;
+  addDrill("upcomingClosings", `Upcoming closings — ${closeWindowLabel(closeWindow)}`, upcoming,
+    `${money(sum(upcoming, l => l.amt))} in volume`);
 
   return {
     leaderboard, noLoRow, teamRow, monthly, upcoming, today,
@@ -1834,7 +1849,7 @@ function computeKpis(loans, { period, ageDays, stuckDays }){
     openCount: open.length,
     aged: aged.length, agedShare: open.length ? aged.length / open.length : NaN,
     locksExpiring: locksExpiring.length, locksExpired: locksExpired.length,
-    closingsSoon: closingsSoon.length, closingsNext: closingsNext.length, closingsPast: closingsPast.length,
+    closingsSoon: closingsSoon.length, closingsVol: sum(closingsSoon, l => l.amt), closeWindow,
     stuck: stuck.length, stuckShare: withMsDate.length ? stuck.length / withMsDate.length : NaN, stuckBase: withMsDate.length,
     fallout: fallout.length,
     milestoneEntries, purposeEntries, purposeTotal, programEntries, loEntries,
@@ -1893,9 +1908,9 @@ function renderKpis(k, period, { ageDays, stuckDays }){
   setText("s_locks", k.locksExpired ? `${fmtInt(k.locksExpired)} open loans already past lock expiration` : "None already expired");
   setHealth("locks", k.locksExpired > 0 ? "bad" : (k.locksExpiring > 0 ? "warn" : "ok"));
 
+  setText("lbl_closeWindow", closeWindowLabel(k.closeWindow));
   setText("k_closings", fmtInt(k.closingsSoon));
-  setText("s_closings", `+${fmtInt(k.closingsNext)} in the following ${CONFIG.closingWindowDays} days` +
-    (k.closingsPast ? ` • ${fmtInt(k.closingsPast)} past their estimated date` : ""));
+  setText("s_closings", `${moneyShort(k.closingsVol)} in volume • by closing date`);
 
   setText("lbl_stuckDays", stuckDays);
   setText("k_stuckLoans", fmtInt(k.stuck));
@@ -2019,30 +2034,31 @@ function lockStatus(l, today){
   if (!l.lockExpDate) return { cls: "warn", text: "No lock date" };
   const left = dayDiff(today, l.lockExpDate);
   if (left < 0) return { cls: "bad", text: "Lock expired" };
-  if (l.estCloseDate && l.lockExpDate < l.estCloseDate) return { cls: "warn", text: "Lock expires before closing" };
+  if (l.closeDate && l.lockExpDate < l.closeDate) return { cls: "warn", text: "Lock expires before closing" };
   return { cls: "ok", text: `Locked (${left}d left)` };
 }
 
 function renderUpcoming(k){
   const rows = k.upcoming.slice(0, CONFIG.upcomingClosingsRows);
+  const win = k.closeWindow === 0 ? "today" : `in the next ${k.closeWindow} days`;
   setText("upcomingSub", k.upcoming.length
-    ? `Next ${rows.length} of ${fmtInt(k.upcoming.length)} open loans by estimated closing date, with lock status`
-    : "Open loans by estimated closing date, with lock status");
+    ? `${rows.length < k.upcoming.length ? `First ${rows.length} of ` : ""}${fmtInt(k.upcoming.length)} loans closing ${win} (${moneyShort(k.closingsVol)}), by closing date, with lock status`
+    : `Loans closing ${win}, by closing date, with lock status`);
   if (!rows.length){
-    $("upcomingClosings").innerHTML = `<div class="empty" style="padding:10px;">No open loans with an estimated closing date from today on.</div>`;
+    $("upcomingClosings").innerHTML = `<div class="empty" style="padding:10px;">No loans have a closing date ${escapeHtml(win)}.</div>`;
     return;
   }
   $("upcomingClosings").innerHTML = `
     <table class="data">
       <thead><tr>
-        <th>Est. Close</th><th>Loan #</th><th>Loan Officer</th><th>Milestone</th>
+        <th>Closing Date</th><th>Loan #</th><th>Loan Officer</th><th>Milestone</th>
         <th class="num">Amount</th><th>Lock Exp.</th><th>Lock Status</th>
       </tr></thead>
       <tbody>${rows.map(l => {
-        const inDays = dayDiff(k.today, l.estCloseDate);
+        const inDays = dayDiff(k.today, l.closeDate);
         const ls = lockStatus(l, k.today);
         return `<tr>
-          <td><b>${escapeHtml(fmtDate(l.estCloseDate))}</b> <span class="muted">${inDays === 0 ? "today" : `in ${inDays}d`}</span></td>
+          <td><b>${escapeHtml(fmtDate(l.closeDate))}</b> <span class="muted">${inDays === 0 ? "today" : `in ${inDays}d`}</span></td>
           <td class="mono">${escapeHtml(l.loanNumber || "—")}</td>
           <td>${escapeHtml(l.lo || "(No LO)")}</td>
           <td>${escapeHtml(l.milestone)}</td>
@@ -2252,6 +2268,7 @@ function restoreLastView(){
   if (v.stuckDays) $("stuckDays").value = v.stuckDays;
   if (typeof v.includeUnassigned === "boolean") $("includeUnassigned").checked = v.includeUnassigned;
   if (v.lbSort && LB_SORTS[v.lbSort]) $("lbSort").value = v.lbSort;
+  setCloseWindow(v.closeWindow);
 
   if (Array.isArray(v.folders) && v.folders.length){
     const before = msFolders.getSelected();
@@ -2275,7 +2292,8 @@ function recompute(){
   const opts = {
     period: periodWindow($("period").value),
     ageDays: readInt("ageDays", 1, 365, CONFIG.defaultAgingDays),
-    stuckDays: readInt("stuckDays", 1, 365, CONFIG.defaultStuckDays)
+    stuckDays: readInt("stuckDays", 1, 365, CONFIG.defaultStuckDays),
+    closeWindow: Math.max(0, Number($("closeWindow").value) || 0)
   };
   const { loans, excludedNoLo } = applyFilters(state.loans);
   const k = computeKpis(loans, opts);
@@ -2310,8 +2328,7 @@ const MODAL_COLUMNS = [
   { key: "amt",             label: "Amount",       get: l => l.amt, type: "money" },
   { key: "appDate",         label: "App Date",     get: l => l.appDate, type: "date" },
   { key: "lockExpDate",     label: "Lock Exp.",    get: l => l.lockExpDate, type: "date" },
-  { key: "estCloseDate",    label: "Est. Close",   get: l => l.estCloseDate, type: "date" },
-  { key: "closeDate",       label: "Closed",       get: l => l.closeDate, type: "date" },
+  { key: "closeDate",       label: "Closing Date", get: l => l.closeDate, type: "date" },
   { key: "purpose",         label: "Purpose",      get: l => l.purpose },
   { key: "loanType",        label: "Loan Type",    get: l => l.loanType },
   { key: "program",         label: "Program",      get: l => l.program },
@@ -2511,6 +2528,7 @@ function captureView(name){
     stuckDays: $("stuckDays").value,
     includeUnassigned: $("includeUnassigned").checked,
     lbSort: $("lbSort").value,
+    closeWindow: $("closeWindow").value,
     filters: f
   };
 }
@@ -2530,6 +2548,7 @@ function applyView(v){
   if (v.stuckDays) $("stuckDays").value = v.stuckDays;
   if (typeof v.includeUnassigned === "boolean") $("includeUnassigned").checked = v.includeUnassigned;
   if (v.lbSort && LB_SORTS[v.lbSort]) $("lbSort").value = v.lbSort;
+  setCloseWindow(v.closeWindow);
 
   const wanted = (v.folders || []).slice().sort().join("|");
   const current = state.loadedFolders.slice().sort().join("|");
